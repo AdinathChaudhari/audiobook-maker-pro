@@ -139,15 +139,18 @@ W = 62   # box width for UI panels
 # ═════════════════════════════════════════════════════════════════════════════
 
 def _box(lines, title=''):
-    """Print a clean bordered box."""
+    """Print a clean bordered box. Long lines are truncated to fit."""
     inner = W - 2
     if title:
-        print(f"  ┌─ {title} {'─' * (inner - len(title) - 3)}┐")
+        print(f"  ┌─ {title} {'─' * max(0, inner - len(title) - 3)}┐")
     else:
         print(f"  ┌{'─' * inner}┐")
+    max_content = inner - 2  # 1 char padding each side
     for line in lines:
-        pad = inner - len(line)
-        print(f"  │ {line}{' ' * (pad - 1)}│")
+        if len(line) > max_content:
+            line = line[:max_content - 1] + '…'
+        pad = max_content - len(line)
+        print(f"  │ {line}{' ' * pad} │")
     print(f"  └{'─' * inner}┘")
 
 def _sep(label=''):
@@ -317,6 +320,16 @@ def ms_to_hms(ms):
 
 def sanitize(name):
     return re.sub(r'[\\/*?:"<>|]', '_', name).strip()
+
+def _check_output_path(output_path):
+    """Warn and confirm before overwriting an existing file."""
+    if output_path.exists():
+        size_mb = output_path.stat().st_size / (1024 * 1024)
+        _warn(f'Output file already exists: {output_path.name}  ({size_mb:.1f} MB)')
+        ans = _ask('Overwrite?  (yes / no)', default='no', valid=['yes', 'no', 'y', 'n'])
+        if ans in ('no', 'n'):
+            print('\n  Aborted — choose a different output path and re-run.\n')
+            sys.exit(0)
 
 # ═════════════════════════════════════════════════════════════════════════════
 #  CHAPTER NAMING
@@ -553,6 +566,7 @@ def build_m4b(audio_paths, chapter_titles, output_path, cover_path, metadata, en
         # ── Step 4: Mux ───────────────────────────────────────────────────────
         _step(4, 4, 'Muxing chapters + cover → M4B')
         output_path.parent.mkdir(parents=True, exist_ok=True)
+        _check_output_path(output_path)
 
         mux_cmd = [FFMPEG, '-y',
                    '-i', str(encoded),
@@ -659,12 +673,22 @@ def _best_audio_format(url):
         pass
     return 'bestaudio/best', 0
 
-def _download_audio(url, dest_path, label=''):
-    """Download best audio from url → dest_path (yt-dlp adds extension). Returns Path."""
-    fmt, _ = _best_audio_format(url)
+def _download_audio(url, dest_path, label='', cache_stem=None):
+    """
+    Download best audio from url → dest_path (yt-dlp adds extension). Returns Path.
 
-    downloaded_bytes = [0]
-    total_bytes      = [0]
+    If cache_stem is provided, the file is saved to the persistent downloads/
+    folder so it can be reused on resume without re-downloading.
+    """
+    # Resume: return cached file immediately if it already exists
+    if cache_stem:
+        cached = _find_cached_download(cache_stem)
+        if cached:
+            _ok(f'Resuming from cache: {cached.name}')
+            return cached
+        dest_path = _dl_cache_dir() / cache_stem
+
+    fmt, _ = _best_audio_format(url)
 
     pbar = tqdm(total=100, unit='%', ncols=W + 4,
                 bar_format=f'  {label or "Download"} ' + '{bar}| {n_fmt}%  {postfix}',
@@ -675,8 +699,6 @@ def _download_audio(url, dest_path, label=''):
             total = d.get('total_bytes') or d.get('total_bytes_estimate', 0)
             done  = d.get('downloaded_bytes', 0)
             if total:
-                total_bytes[0]      = total
-                downloaded_bytes[0] = done
                 pct = int(done / total * 100)
                 pbar.n = pct
                 pbar.set_postfix_str(d.get('_speed_str', ''))
@@ -732,13 +754,21 @@ def _cache_path(url):
     d = Path('cache'); d.mkdir(exist_ok=True)
     return d / f'pl_{h}.json'
 
+CACHE_MAX_AGE_S = 24 * 60 * 60  # 24 hours
+
 def _load_cache(url):
     p = _cache_path(url)
     if p.exists():
         try:
             data = json.loads(p.read_text(encoding='utf-8'))
-            if data.get('url') == url:
-                return data.get('entries'), data.get('title')
+            if data.get('url') != url:
+                return None, None
+            age = time.time() - data.get('saved_at', 0)
+            if age > CACHE_MAX_AGE_S:
+                _info(f'Playlist cache is {int(age / 3600)}h old — refreshing…')
+                p.unlink(missing_ok=True)
+                return None, None
+            return data.get('entries'), data.get('title')
         except Exception:
             pass
     return None, None
@@ -746,11 +776,30 @@ def _load_cache(url):
 def _save_cache(url, entries, title):
     try:
         _cache_path(url).write_text(
-            json.dumps({'url': url, 'entries': entries, 'title': title}, ensure_ascii=False),
+            json.dumps({'url': url, 'entries': entries, 'title': title,
+                        'saved_at': time.time()}, ensure_ascii=False),
             encoding='utf-8'
         )
     except Exception:
         pass
+
+# ── Download cache (persist audio between runs for resume support) ─────────
+
+def _dl_cache_dir():
+    d = Path('downloads'); d.mkdir(exist_ok=True)
+    return d
+
+def _dl_cache_stem(url, index):
+    """Stable filename for a given URL + playlist position."""
+    h = hashlib.md5(url.encode()).hexdigest()[:12]
+    return f'{index:04d}_{h}'
+
+def _find_cached_download(stem):
+    """Return the cached audio file if it already exists, else None."""
+    for f in _dl_cache_dir().iterdir():
+        if f.stem == stem and f.suffix.lower() in AUDIO_EXTS:
+            return f
+    return None
 
 def _fetch_playlist(url):
     entries, title = _load_cache(url)
@@ -854,9 +903,10 @@ def mode_playlist(encoder_info):
     output_path = Path(out_in or suggested_out)
 
     with tempfile.TemporaryDirectory() as _tmp:
-        tmp         = Path(_tmp)
-        audio_files = []
-        failed      = []
+        tmp                  = Path(_tmp)
+        audio_files          = []
+        chapter_titles_final = []
+        failed               = []
 
         # Cover
         _sep('DOWNLOADING')
@@ -881,14 +931,15 @@ def mode_playlist(encoder_info):
             vurl   = (entry.get('webpage_url') or
                       f"https://www.youtube.com/watch?v={entry['id']}")
             vtitle = entry.get('title', f'Video {i}')
-            # Truncate long titles for the label
             label  = vtitle[:28] + '…' if len(vtitle) > 30 else vtitle
-            af     = _download_audio(vurl, tmp / f'{i:04d}', label=f'[{i}/{total}] {label}')
+            stem   = _dl_cache_stem(vurl, i)
+            af     = _download_audio(vurl, tmp / f'{i:04d}', label=f'[{i}/{total}] {label}',
+                                     cache_stem=stem)
             if af and af.exists():
                 audio_files.append(af)
+                chapter_titles_final.append(chapter_titles[i - 1])
             else:
                 failed.append(i)
-                chapter_titles.pop(i - 1 - len(failed) + 1)
             overall.update(1)
         overall.close()
 
@@ -897,7 +948,7 @@ def mode_playlist(encoder_info):
         if not audio_files:
             print('\n  No audio downloaded. Aborting.\n'); sys.exit(1)
 
-        build_m4b(audio_files, chapter_titles[:len(audio_files)],
+        build_m4b(audio_files, chapter_titles_final,
                   output_path, cover_path, meta, encoder_info)
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -999,7 +1050,9 @@ def mode_spreadsheet(encoder_info):
             # Header line for this track
             label = raw_title[:40] + '…' if len(raw_title) > 42 else raw_title
             print(f'\n  ┌─ [{i}/{total}]  {label}')
-            af = _download_audio(url, tmp / f'{i:04d}', label='  │  Downloading')
+            stem  = _dl_cache_stem(url, i)
+            af    = _download_audio(url, tmp / f'{i:04d}', label='  │  Downloading',
+                                    cache_stem=stem)
             if af and af.exists():
                 audio_files.append(af)
                 chapter_titles_final.append(chapter_titles[i - 1])
