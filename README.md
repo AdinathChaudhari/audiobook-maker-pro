@@ -1,0 +1,217 @@
+# Audiobook Maker PRO
+
+Convert anything into a chapterized `.m4b` audiobook — from your local files, a YouTube video, an entire playlist, or a spreadsheet of links.
+
+One script. Fully interactive. No config files needed.
+
+---
+
+## Features
+
+- **Four input sources** — folder of audio files, single YT video, YT playlist, Excel/CSV spreadsheet
+- **Smart encoding** — detects hardware acceleration (Apple AudioToolbox) and uses CBR; falls back to software VBR automatically
+- **No upsampling** — measures source bitrate and adds a 10% buffer; never inflates file size without quality gain
+- **Chapter naming** — keep original titles, number-only, or number + title
+- **Cover art** — use YouTube thumbnail or supply your own image
+- **Rich metadata** — author, narrator, year, genre, description embedded in the M4B
+- **Clean progress UI** — per-track download bars, overall progress bar, encoding progress bar
+- **Audio notification** — spoken "Your audiobook is ready" on completion (macOS); system sound on Windows/Linux
+- **Playlist cache** — playlist metadata is cached so re-runs skip the slow extraction step
+- **Cross-platform** — macOS, Linux, Windows
+
+---
+
+## Modes at a glance
+
+| # | Input | Output |
+|---|-------|--------|
+| 1 | Folder of `.mp3` / `.m4a` / `.wav` etc. | Single `.m4b` with chapters |
+| 2 | YouTube video URL | Single `.m4b` |
+| 3 | YouTube playlist URL | Single `.m4b` — each video is one chapter |
+| 4 | Excel / CSV — title column + URL column | Single `.m4b` — each row is one chapter |
+
+---
+
+## Requirements
+
+### System
+- **Python** 3.10+
+- **FFmpeg** (with `ffprobe`)
+
+```bash
+# macOS
+brew install ffmpeg
+
+# Ubuntu / Debian
+sudo apt install ffmpeg
+
+# Windows — download from https://ffmpeg.org/download.html
+```
+
+### Python packages
+
+```bash
+pip install yt-dlp tqdm pandas openpyxl
+```
+
+> `openpyxl` is only needed for `.xlsx` files (mode 4). You can skip it if you use CSV instead.
+
+---
+
+## Installation
+
+```bash
+git clone https://github.com/YOUR_USERNAME/audiobook-maker-pro.git
+cd audiobook-maker-pro
+pip install -r requirements.txt
+```
+
+---
+
+## Usage
+
+```bash
+python audiobook_maker.py
+```
+
+The tool guides you through every decision interactively — no flags, no config files.
+
+### Example session (mode 4 — spreadsheet)
+
+```
+  ──────────────────── SPREADSHEET → ONE AUDIOBOOK ────────────────────
+  ┌─ EXPECTED FORMAT ──────────────────────────────────────────────────┐
+  │ Your file must have exactly these two column headers               │
+  │ in the first row (case-insensitive, extra spaces OK):              │
+  │                                                                    │
+  │    title   |   link                                                │
+  │   ─────────┼──────────────────────────────────                    │
+  │   Intro     │  https://youtube.com/watch?v=...                    │
+  │   Chapter 1 │  https://youtube.com/watch?v=...                    │
+  │   Chapter 2 │  https://youtube.com/watch?v=...                    │
+  │                                                                    │
+  │ Each row = one chapter.  Blank rows are skipped.                   │
+  └────────────────────────────────────────────────────────────────────┘
+
+  Path to Excel (.xlsx) or CSV file: ~/Books/my_list.xlsx
+  ✓  12 chapter(s) ready
+
+  ...chapter naming, title, cover, metadata prompts...
+
+  ──────────────────── DOWNLOADING ────────────────────────────────────
+
+  ┌─ [1/12]  Introduction
+  │  Downloading  ████████████████████| 100%  3.1MB/s
+  └─ ✓  1/12 audio downloaded
+
+  ┌─ [2/12]  Part One — Laying Plans
+  │  Downloading  ████████████████████| 100%  2.8MB/s
+  └─ ✓  2/12 audio downloaded
+
+  ...
+
+  ✓  12 of 12 audio tracks downloaded successfully
+
+  ──────────────────── ENCODING ───────────────────────────────────────
+  Encoder  :  Apple AudioToolbox  (hardware, macOS)
+  Mode     :  Hardware · CBR
+  Chapters :  12
+
+  Step 1/4  Analysing source files
+    ████████████████████| 12/12
+  ✓  Total duration : 06:14:30
+
+  Step 3/4  Encoding  [CBR 128k]
+    ████████████████████| 22470/22470 s
+  ✓  Encoded  (CBR 128k)
+
+  ┌─ DONE ─────────────────────────────────────────────────────────────┐
+  │ AUDIOBOOK CREATED                                                  │
+  │                                                                    │
+  │ File      :  my_list.m4b                                           │
+  │ Location  :  /Users/you                                            │
+  │ Size      :  287.3 MB                                              │
+  │ Duration  :  06:14:30                                              │
+  │ Chapters  :  12                                                    │
+  └────────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## Spreadsheet format (mode 4)
+
+Your file must have **exactly these two column headers** in the first row:
+
+| title | link |
+|-------|------|
+| Introduction | https://youtube.com/watch?v=... |
+| Chapter One | https://youtube.com/watch?v=... |
+| Chapter Two | https://youtube.com/watch?v=... |
+
+**Rules:**
+- Headers are case-insensitive — `Title`, `TITLE`, `title`, `  Title ` all work
+- Leading/trailing spaces in headers and cell values are stripped automatically
+- Blank rows are skipped silently
+- Column order doesn't matter as long as both headers are present
+- Both `.xlsx` and `.csv` are supported; for `.xlsx` install `openpyxl`
+
+The tool will show a preview of the first 3 rows after loading so you can confirm it parsed correctly before anything is downloaded.
+
+---
+
+## Encoding logic
+
+| Condition | Encoder | Mode |
+|-----------|---------|------|
+| Apple hardware available | `aac_at` | CBR at `source × 1.10`, snapped to nearest step |
+| Fraunhofer FDK installed | `libfdk_aac` | VBR quality level matching `source × 1.10` |
+| Fallback | `aac` (FFmpeg native) | VBR quality level matching `source × 1.10` |
+
+The tool warns you and asks for confirmation if the computed target is more than 30% above the detected source bitrate.
+
+CBR ladder: 64 / 96 / 128 / 160 / 192 / 256 / 320 kbps
+
+---
+
+## Output format
+
+All output files are standard `.m4b` (MPEG-4 Audiobook) compatible with:
+- Apple Books / iTunes
+- VLC
+- Prologue, Bound, BookPlayer (iOS)
+- Any AAC-capable player
+
+---
+
+## FAQ
+
+**The download is slow — is that normal?**
+Download speed depends on your internet connection and YouTube's throttling. The progress bar shows live speed.
+
+**Can I re-run after a partial download?**
+For playlists, failed tracks are skipped with a warning and the rest are stitched together. There is no per-track resume yet.
+
+**What if my folder has mixed audio formats?**
+Supported: `.mp3 .m4a .m4b .mp4 .wav .flac .aac .ogg .opus .wma`. All are concatenated via FFmpeg's concat demuxer.
+
+**Does it work with private YouTube videos?**
+No — yt-dlp can only download videos you have access to via a public URL. Private and deleted videos are automatically filtered out from playlists.
+
+**Can I disable the voice notification?**
+The `notify()` function at the bottom of the script can be commented out, or you can call `main()` with a quick edit.
+
+---
+
+## License
+
+MIT License — see [LICENSE](LICENSE).
+
+---
+
+## Acknowledgements
+
+Built on top of:
+- [yt-dlp](https://github.com/yt-dlp/yt-dlp) — YouTube downloading
+- [FFmpeg](https://ffmpeg.org/) — audio processing
+- [tqdm](https://github.com/tqdm/tqdm) — progress bars
+- [pandas](https://pandas.pydata.org/) — spreadsheet parsing
