@@ -45,7 +45,7 @@ def _bootstrap():
     # ── pip packages ─────────────────────────────────────────────────────────
     REQUIRED = [
         ('tqdm',     'tqdm>=4.66.0'),
-        ('yt_dlp',   'yt-dlp>=2024.1.0'),
+        ('yt_dlp',   'yt-dlp>=2026.3.17'),
         ('pandas',   'pandas>=2.0.0'),
         ('openpyxl', 'openpyxl>=3.1.0'),
     ]
@@ -651,7 +651,8 @@ class _Q:
     def error(self, m): pass
 
 def _ytdlp_info(url, flat=False):
-    opts = {'quiet': True, 'no_warnings': True, 'logger': _Q(), 'extract_flat': flat}
+    opts = {'quiet': True, 'no_warnings': True, 'logger': _Q(), 'extract_flat': flat,
+            'remote_components': ['ejs:github']}
     with yt_dlp.YoutubeDL(opts) as ydl:
         return ydl.extract_info(url, download=False)
 
@@ -713,6 +714,7 @@ def _download_audio(url, dest_path, label='', cache_stem=None):
         'progress_hooks': [hook],
         'quiet': True, 'no_warnings': True, 'logger': _Q(),
         'postprocessors': [],
+        'remote_components': ['ejs:github'],
     }
     with yt_dlp.YoutubeDL(opts) as ydl:
         ydl.download([url])
@@ -733,6 +735,7 @@ def _download_thumbnail(url, dest_folder, stem):
         'outtmpl': out + '.%(ext)s',
         'ffmpeg_location': FFMPEG,
         'quiet': True, 'no_warnings': True, 'logger': _Q(),
+        'remote_components': ['ejs:github'],
     }
     with yt_dlp.YoutubeDL(opts) as ydl:
         try: ydl.download([url])
