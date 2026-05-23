@@ -10,12 +10,13 @@ One script. Fully interactive. No config files needed.
 
 - **Four input sources** — folder of audio files, single YT video, YT playlist, Excel/CSV spreadsheet
 - **Smart encoding** — detects hardware acceleration (Apple AudioToolbox) and uses CBR; falls back to software VBR automatically
-- **No upsampling** — measures source bitrate and adds a 10% buffer; never inflates file size without quality gain
+- **Smart bitrate** — measures source bitrate, adds a 10% buffer, and snaps up to the next CBR rung
 - **Chapter naming** — keep original titles, number-only, or number + title
-- **Cover art** — use YouTube thumbnail or supply your own image
+- **Cover art** — auto-detects a JPG/PNG in the source folder; falls back to YouTube thumbnail or manual path
 - **Rich metadata** — author, narrator, year, genre, description embedded in the M4B
 - **Clean progress UI** — per-track download bars, overall progress bar, encoding progress bar
 - **Audio notification** — spoken "Your audiobook is ready" on completion (macOS); system sound on Windows/Linux
+- **Redo loop** — after each audiobook finishes, offers to make another without restarting the script
 - **Playlist cache** — playlist metadata is cached so re-runs skip the slow extraction step
 - **Cross-platform** — macOS, Linux, Windows
 
@@ -163,11 +164,11 @@ The tool will show a preview of the first 3 rows after loading so you can confir
 
 | Condition | Encoder | Mode |
 |-----------|---------|------|
-| Apple hardware available | `aac_at` | CBR at `source × 1.10`, snapped to nearest step |
+| Apple hardware available | `aac_at` | CBR — snapped **up** to next rung ≥ `source × 1.10` |
 | Fraunhofer FDK installed | `libfdk_aac` | VBR quality level matching `source × 1.10` |
 | Fallback | `aac` (FFmpeg native) | VBR quality level matching `source × 1.10` |
 
-The tool warns you and asks for confirmation if the computed target is more than 30% above the detected source bitrate.
+CBR always rounds **up** to the next ladder rung, so the output is never below the source quality. The tool warns you and asks for confirmation if the computed target is more than 30% above the detected source bitrate.
 
 CBR ladder: 64 / 96 / 128 / 160 / 192 / 256 / 320 kbps
 
