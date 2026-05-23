@@ -326,7 +326,7 @@ def _check_output_path(output_path):
     if output_path.exists():
         size_mb = output_path.stat().st_size / (1024 * 1024)
         _warn(f'Output file already exists: {output_path.name}  ({size_mb:.1f} MB)')
-        ans = _ask('Overwrite?  (y/n) [no]', default='no', valid=['yes', 'no', 'y', 'n'])
+        ans = _ask('Overwrite?  (y/n)', default='no', valid=['yes', 'no', 'y', 'n'])
         if ans in ('no', 'n'):
             print('\n  Aborted — choose a different output path and re-run.\n')
             sys.exit(0)
@@ -380,7 +380,7 @@ def ask_metadata():
     }
 
 def ask_title(suggested):
-    choice = _ask(f'Use title "{suggested}"?  (y/n) [yes]', default='yes',
+    choice = _ask(f'Use title "{suggested}"?  (y/n)', default='yes',
                   valid=['yes', 'no', 'y', 'n'])
     if choice in ('yes', 'y'):
         return suggested
@@ -634,7 +634,7 @@ def mode_folder(encoder_info):
         cover_path = cover_images[0]
         _ok(f'Cover image detected: {cover_path.name}')
     else:
-        choice = _ask('Do you have a cover image?  (y/n) [no]', default='no',
+        choice = _ask('Do you have a cover image?  (y/n)', default='no',
                       valid=['yes', 'no', 'y', 'n'])
         if choice in ('yes', 'y'):
             cover_path = _ask_path('Path to cover image (JPG or PNG)')
@@ -1129,7 +1129,7 @@ def main():
         print()
         notify()
 
-        again = _ask('\n  Make another audiobook?  (y/n) [no]', default='no',
+        again = _ask('\n  Make another audiobook?  (y/n)', default='no',
                      valid=['yes', 'no', 'y', 'n'])
         if again not in ('yes', 'y'):
             print('\n  Done. Goodbye!\n')
