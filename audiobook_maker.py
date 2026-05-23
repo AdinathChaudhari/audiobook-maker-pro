@@ -700,9 +700,11 @@ def mode_batch_folder(encoder_info):
 
     # Chapter naming — asked once
     _sep('CHAPTER NAMING')
+    def _sort_key(f):
+        mo = re.match(r'^(\d+)', f.stem)
+        return (int(mo.group(1)) if mo else 0, f.name)
     sample_titles = [re.sub(r'^\d+[\s\-_\.]*', '', f.stem).strip() or f.stem
-                     for f in sorted(subfolders[0].iterdir(),
-                                     key=lambda f: (int(m.group(1)) if (m := re.match(r'^(\d+)', f.stem)) else 0, f.name))
+                     for f in sorted(subfolders[0].iterdir(), key=_sort_key)
                      if f.suffix.lower() in AUDIO_EXTS][:3]
     namer = ask_chapter_naming(sample_titles)
 
