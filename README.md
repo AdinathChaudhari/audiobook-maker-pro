@@ -207,8 +207,43 @@ Supported: `.mp3 .m4a .m4b .mp4 .wav .flac .aac .ogg .opus .wma`. All are concat
 **Does it work with private YouTube videos?**
 Yes — when you select a YouTube mode (2, 3, or 4), the tool asks which browser to pull cookies from. As long as you're logged into YouTube in that browser, private and Premium videos will download. Supports Safari, Chrome, Firefox, Edge, Brave, and Opera. Skip this prompt to download public videos only.
 
+See [Browser cookie permissions](#browser-cookie-permissions) if you get a permission error.
+
 **Can I disable the voice notification?**
 The `notify()` function at the bottom of the script can be commented out, or you can call `main()` with a quick edit.
+
+---
+
+## Browser cookie permissions
+
+When you pick a browser in the YouTube authentication prompt, yt-dlp reads the cookie database directly from disk. On macOS, Chrome, Brave, and Edge store their cookie database in a location that requires **Full Disk Access** — without it you'll see this error:
+
+```
+ERROR: Could not copy Chrome cookie database.
+```
+
+### Fix (macOS)
+
+1. Open **System Settings → Privacy & Security → Full Disk Access**
+2. Click the **+** button
+3. Add your terminal app (Terminal.app, iTerm2, Warp, etc.)
+4. Re-run the script
+
+Safari does **not** require Full Disk Access and works out of the box — use it if you want to avoid the permission step.
+
+### Windows
+
+Chrome/Edge on Windows may show:
+
+```
+PermissionError: [Errno 13] Permission denied: '...Cookies'
+```
+
+Close Chrome/Edge completely before running the script, as the browser locks the cookie file while open.
+
+### Linux
+
+No special permissions needed. Firefox cookies work without any extra steps.
 
 ---
 

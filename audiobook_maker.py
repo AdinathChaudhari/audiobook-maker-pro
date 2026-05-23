@@ -1240,6 +1240,10 @@ def main():
         _box([
             'Use browser cookies to access private / Premium videos.',
             'Skip (press Enter) for public videos only.',
+            '',
+            'macOS: Chrome/Brave/Edge require Full Disk Access for Terminal.',
+            '  System Settings → Privacy & Security → Full Disk Access → add Terminal',
+            'If you see: "Could not copy Chrome cookie database" — that is why.',
         ])
         BROWSERS = ['safari', 'chrome', 'firefox', 'edge', 'brave', 'opera']
         for i, b in enumerate(BROWSERS, 1):
@@ -1292,6 +1296,10 @@ def main():
             _box([
                 'Use browser cookies to access private / Premium videos.',
                 'Skip (press Enter) for public videos only.',
+                '',
+                'macOS: Chrome/Brave/Edge require Full Disk Access for Terminal.',
+                '  System Settings → Privacy & Security → Full Disk Access → add Terminal',
+                'If you see: "Could not copy Chrome cookie database" — that is why.',
             ])
             BROWSERS = ['safari', 'chrome', 'firefox', 'edge', 'brave', 'opera']
             for i, b in enumerate(BROWSERS, 1):
