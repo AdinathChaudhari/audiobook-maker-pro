@@ -2,12 +2,13 @@
 """
 Audiobook Maker — Universal Converter
 ======================================
-Four workflows, one interactive tool:
+Five workflows, one interactive tool:
 
-  1. Folder      → M4B  (local audio files as chapters)
-  2. YT Video    → M4B  (single YouTube video)
-  3. YT Playlist → M4B  (whole playlist stitched as one audiobook)
-  4. Spreadsheet → M4B  (Excel/CSV with title + URL columns)
+  1. Folder         → M4B  (local audio files as chapters)
+  2. YT Video       → M4B  (single YouTube video)
+  3. YT Playlist    → M4B  (whole playlist stitched as one audiobook)
+  4. Spreadsheet    → M4B  (Excel/CSV with title + URL columns)
+  5. Parent Folder  → M4B  (each subfolder becomes one audiobook)
 
 Run:
     python audiobook_maker.py
