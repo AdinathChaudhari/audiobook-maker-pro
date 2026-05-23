@@ -390,7 +390,7 @@ def ask_title(suggested):
 #  CORE: BUILD M4B
 # ═════════════════════════════════════════════════════════════════════════════
 
-def build_m4b(audio_paths, chapter_titles, output_path, cover_path, metadata, encoder_info):
+def build_m4b(audio_paths, chapter_titles, output_path, cover_path, metadata, encoder_info, batch=False):
     """
     Four-pass M4B builder:
       1. Encode each source file individually  →  per-chapter .m4a files
@@ -432,11 +432,15 @@ def build_m4b(audio_paths, chapter_titles, output_path, cover_path, metadata, en
         if src_kbps > 0 and cbr_kbps > src_kbps * 1.30:
             _warn(f'{cbr} is >30% above detected source (~{src_kbps} kbps) — file will be larger with no quality gain.')
             sys.stdout.flush()
-            ans = input('\n  Keep target bitrate anyway? (y/n) [yes]: ').strip().lower() or 'yes'
-            if ans not in ('yes', 'y'):
-                # Skip the 10% buffer — snap up to just cover the raw source
+            if batch:
                 cbr = next((f'{k}k' for k in CBR_LADDER if k >= src_kbps), f'{CBR_LADDER[-1]}k')
-                _ok(f'Adjusted to {cbr}')
+                _ok(f'Auto-adjusted to {cbr} (batch mode)')
+            else:
+                ans = input('\n  Keep target bitrate anyway? (y/n) [yes]: ').strip().lower() or 'yes'
+                if ans not in ('yes', 'y'):
+                    # Skip the 10% buffer — snap up to just cover the raw source
+                    cbr = next((f'{k}k' for k in CBR_LADDER if k >= src_kbps), f'{CBR_LADDER[-1]}k')
+                    _ok(f'Adjusted to {cbr}')
 
         enc_flags  = ['-b:a', cbr]
         mode_label = f'CBR {cbr}'
@@ -448,10 +452,14 @@ def build_m4b(audio_paths, chapter_titles, output_path, cover_path, metadata, en
         if src_kbps > 0 and vbr_kbps > src_kbps * 1.30:
             _warn(f'Quality {vbr_q} (~{vbr_kbps} kbps) is >30% above source (~{src_kbps} kbps).')
             sys.stdout.flush()
-            ans = input('\n  Keep quality level anyway? [yes]: ').strip().lower() or 'yes'
-            if ans not in ('yes', 'y'):
-                vbr_q, vbr_kbps = pick_vbr_quality(src_kbps * 0.95)
-                _ok(f'Adjusted to quality {vbr_q} (~{vbr_kbps} kbps)')
+            if batch:
+                vbr_q, vbr_kbps = pick_vbr_quality(src_kbps)
+                _ok(f'Auto-adjusted to quality {vbr_q} (~{vbr_kbps} kbps) (batch mode)')
+            else:
+                ans = input('\n  Keep quality level anyway? [yes]: ').strip().lower() or 'yes'
+                if ans not in ('yes', 'y'):
+                    vbr_q, vbr_kbps = pick_vbr_quality(src_kbps * 0.95)
+                    _ok(f'Adjusted to quality {vbr_q} (~{vbr_kbps} kbps)')
 
         enc_flags  = ['-q:a', str(vbr_q)]
         mode_label = f'VBR q{vbr_q}  (~{vbr_kbps} kbps)'
@@ -647,6 +655,91 @@ def mode_folder(encoder_info):
     output_path = Path(out_in or suggested_out)
 
     build_m4b(files, chapter_titles, output_path, cover_path, meta, encoder_info)
+
+# ═════════════════════════════════════════════════════════════════════════════
+#  BATCH FOLDER MODE
+# ═════════════════════════════════════════════════════════════════════════════
+
+def mode_batch_folder(encoder_info):
+    _sep('BATCH FOLDERS → AUDIOBOOKS')
+    parent = Path(_ask_path('Path to parent folder containing subfolders', is_dir=True))
+
+    IMAGE_EXTS = {'.jpg', '.jpeg', '.png'}
+
+    # Discover subfolders that contain at least one audio file
+    subfolders = sorted([
+        d for d in parent.iterdir()
+        if d.is_dir() and any(f.suffix.lower() in AUDIO_EXTS for f in d.iterdir())
+    ])
+
+    if not subfolders:
+        print('\n  No subfolders with audio files found.\n'); sys.exit(1)
+
+    _box([d.name for d in subfolders[:8]] + ([f'… and {len(subfolders) - 8} more'] if len(subfolders) > 8 else []),
+         title=f'Found {len(subfolders)} subfolder(s) to convert')
+
+    # Check which already have a .m4b and offer to skip
+    already_done = [d for d in subfolders if (parent / f'{sanitize(d.name)}.m4b').exists()]
+    if already_done:
+        _box([f'✓  {d.name}.m4b' for d in already_done], title=f'{len(already_done)} already converted — will skip')
+        subfolders = [d for d in subfolders if d not in already_done]
+        if not subfolders:
+            print('\n  All audiobooks already exist. Nothing to do.\n'); return
+
+    # Shared metadata — asked once, applied to all
+    _sep('SHARED METADATA  (applied to all audiobooks)')
+    _info('Press Enter to skip any field.')
+    shared_meta = {
+        'author':      _ask_optional('Author name'),
+        'narrator':    _ask_optional('Narrator name'),
+        'year':        _ask_optional('Year  (e.g. 2024)'),
+        'genre':       _ask_optional('Genre / Category'),
+        'description': _ask_optional('Description / Comment'),
+    }
+
+    # Chapter naming — asked once
+    _sep('CHAPTER NAMING')
+    sample_titles = [re.sub(r'^\d+[\s\-_\.]*', '', f.stem).strip() or f.stem
+                     for f in sorted(subfolders[0].iterdir(),
+                                     key=lambda f: (int(m.group(1)) if (m := re.match(r'^(\d+)', f.stem)) else 0, f.name))
+                     if f.suffix.lower() in AUDIO_EXTS][:3]
+    namer = ask_chapter_naming(sample_titles)
+
+    # Process each subfolder
+    done, skipped, failed = [], [], []
+    for i, folder in enumerate(subfolders, 1):
+        _sep(f'[{i}/{len(subfolders)}]  {folder.name}')
+
+        files = sorted(
+            [f for f in folder.iterdir() if f.suffix.lower() in AUDIO_EXTS],
+            key=lambda f: (int(m.group(1)) if (m := re.match(r'^(\d+)', f.stem)) else 0, f.name)
+        )
+
+        raw_titles     = [re.sub(r'^\d+[\s\-_\.]*', '', f.stem).strip() or f.stem for f in files]
+        chapter_titles = [namer(j + 1, t) for j, t in enumerate(raw_titles)]
+
+        cover_images = [f for f in folder.iterdir() if f.suffix.lower() in IMAGE_EXTS]
+        cover_path   = cover_images[0] if len(cover_images) == 1 else None
+        if cover_path:
+            _ok(f'Cover detected: {cover_path.name}')
+
+        meta          = {**shared_meta, 'title': folder.name}
+        output_path   = parent / f'{sanitize(folder.name)}.m4b'
+
+        try:
+            build_m4b(files, chapter_titles, output_path, cover_path, meta, encoder_info, batch=True)
+            done.append(folder.name)
+        except Exception as e:
+            _warn(f'Failed: {e}')
+            failed.append(folder.name)
+
+    # Final summary
+    _sep('BATCH COMPLETE')
+    _box(
+        [f'✓  {n}' for n in done] +
+        ([f'✗  {n}  (failed)' for n in failed] if failed else []),
+        title=f'{len(done)} succeeded  |  {len(failed)} failed  |  {len(already_done)} skipped'
+    )
 
 # ═════════════════════════════════════════════════════════════════════════════
 #  YOUTUBE HELPERS
@@ -1106,20 +1199,22 @@ def main():
     # Mode selection
     _sep('WHAT WOULD YOU LIKE TO DO?')
     _box([
-        '1.  Folder of audio files  →  audiobook',
-        '2.  YouTube video          →  audiobook',
-        '3.  YouTube playlist       →  ONE audiobook  (each video = chapter)',
-        '4.  Spreadsheet            →  ONE audiobook  (each row  = chapter)',
+        '1.  Folder of audio files         →  audiobook',
+        '2.  YouTube video                 →  audiobook',
+        '3.  YouTube playlist              →  ONE audiobook  (each video = chapter)',
+        '4.  Spreadsheet                   →  ONE audiobook  (each row  = chapter)',
         '    Excel / CSV with title + YouTube URL columns',
+        '5.  Parent folder of subfolders   →  one audiobook per subfolder',
     ])
 
-    choice = _ask('Choice', valid=['1', '2', '3', '4'])
+    choice = _ask('Choice', valid=['1', '2', '3', '4', '5'])
 
     dispatch = {
         '1': mode_folder,
         '2': mode_single_video,
         '3': mode_playlist,
         '4': mode_spreadsheet,
+        '5': mode_batch_folder,
     }
     while True:
         dispatch[choice](encoder_info)
@@ -1139,13 +1234,14 @@ def main():
         t0 = time.time()
         _sep('WHAT WOULD YOU LIKE TO DO?')
         _box([
-            '1.  Folder of audio files  →  audiobook',
-            '2.  YouTube video          →  audiobook',
-            '3.  YouTube playlist       →  ONE audiobook  (each video = chapter)',
-            '4.  Spreadsheet            →  ONE audiobook  (each row  = chapter)',
+            '1.  Folder of audio files         →  audiobook',
+            '2.  YouTube video                 →  audiobook',
+            '3.  YouTube playlist              →  ONE audiobook  (each video = chapter)',
+            '4.  Spreadsheet                   →  ONE audiobook  (each row  = chapter)',
             '    Excel / CSV with title + YouTube URL columns',
+            '5.  Parent folder of subfolders   →  one audiobook per subfolder',
         ])
-        choice = _ask('Choice', valid=['1', '2', '3', '4'])
+        choice = _ask('Choice', valid=['1', '2', '3', '4', '5'])
 
 
 if __name__ == '__main__':

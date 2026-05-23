@@ -8,7 +8,7 @@ One script. Fully interactive. No config files needed.
 
 ## Features
 
-- **Four input sources** — folder of audio files, single YT video, YT playlist, Excel/CSV spreadsheet
+- **Five input sources** — folder of audio files, single YT video, YT playlist, Excel/CSV spreadsheet, parent folder of subfolders (batch)
 - **Smart encoding** — detects hardware acceleration (Apple AudioToolbox) and uses CBR; falls back to software VBR automatically
 - **Smart bitrate** — measures source bitrate, adds a 10% buffer, and snaps up to the next CBR rung
 - **Chapter naming** — keep original titles, number-only, or number + title
@@ -30,6 +30,15 @@ One script. Fully interactive. No config files needed.
 | 2 | YouTube video URL | Single `.m4b` |
 | 3 | YouTube playlist URL | Single `.m4b` — each video is one chapter |
 | 4 | Excel / CSV — title column + URL column | Single `.m4b` — each row is one chapter |
+| 5 | Parent folder containing subfolders | One `.m4b` per subfolder (batch mode) |
+
+### Batch mode (5) details
+
+- Each subfolder becomes one audiobook; subfolder name becomes the title
+- Shared metadata (author, narrator, year, genre) is asked **once** and applied to all
+- Cover art is auto-detected per subfolder (single JPG/PNG inside it)
+- Already-converted books (`.m4b` exists in parent) are skipped automatically
+- Bitrate is detected per subfolder independently; if >30% above source it auto-adjusts without prompting
 
 ---
 
