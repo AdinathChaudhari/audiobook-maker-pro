@@ -136,25 +136,31 @@ VBR_QUALITY_MAP = {                    # AAC VBR: 0 = highest quality
     4: 75,  5: 60,  6: 52,  7: 45,  8: 35, 9: 28,
 }
 
-W = 62   # box width for UI panels
+try:
+    W = max(62, min(os.get_terminal_size(1).columns - 4, 100))
+except (AttributeError, OSError):
+    W = 62
 
 # ═════════════════════════════════════════════════════════════════════════════
 #  UI HELPERS
 # ═════════════════════════════════════════════════════════════════════════════
 
 def _box(lines, title=''):
-    """Print a clean bordered box. Long lines are truncated to fit."""
+    """Print a clean bordered box. Long lines are word-wrapped to fit."""
+    import textwrap
     inner = W - 2
+    max_content = inner - 2  # 1 char padding each side
     if title:
         print(f"  ┌─ {title} {'─' * max(0, inner - len(title) - 3)}┐")
     else:
         print(f"  ┌{'─' * inner}┐")
-    max_content = inner - 2  # 1 char padding each side
     for line in lines:
-        if len(line) > max_content:
-            line = line[:max_content - 1] + '…'
-        pad = max_content - len(line)
-        print(f"  │ {line}{' ' * pad} │")
+        if not line:
+            print(f"  │{' ' * inner}│")
+            continue
+        for wrapped in textwrap.wrap(line, width=max_content) or [line]:
+            pad = max_content - len(wrapped)
+            print(f"  │ {wrapped}{' ' * pad} │")
     print(f"  └{'─' * inner}┘")
 
 def _sep(label=''):
