@@ -434,7 +434,8 @@ def build_m4b(audio_paths, chapter_titles, output_path, cover_path, metadata, en
             sys.stdout.flush()
             ans = input('\n  Keep target bitrate anyway? [yes]: ').strip().lower() or 'yes'
             if ans not in ('yes', 'y'):
-                cbr = pick_cbr_bitrate(src_kbps * 0.95)
+                # Skip the 10% buffer — snap up to just cover the raw source
+                cbr = next((f'{k}k' for k in CBR_LADDER if k >= src_kbps), f'{CBR_LADDER[-1]}k')
                 _ok(f'Adjusted to {cbr}')
 
         enc_flags  = ['-b:a', cbr]
