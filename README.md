@@ -205,7 +205,7 @@ For playlists, failed tracks are skipped with a warning and the rest are stitche
 Supported: `.mp3 .m4a .m4b .mp4 .wav .flac .aac .ogg .opus .wma`. All are concatenated via FFmpeg's concat demuxer.
 
 **Does it work with private YouTube videos?**
-No — yt-dlp can only download videos you have access to via a public URL. Private and deleted videos are automatically filtered out from playlists.
+Yes — when you select a YouTube mode (2, 3, or 4), the tool asks which browser to pull cookies from. As long as you're logged into YouTube in that browser, private and Premium videos will download. Supports Safari, Chrome, Firefox, Edge, Brave, and Opera. Skip this prompt to download public videos only.
 
 **Can I disable the voice notification?**
 The `notify()` function at the bottom of the script can be commented out, or you can call `main()` with a quick edit.
