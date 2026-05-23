@@ -298,10 +298,10 @@ def pick_cbr_bitrate(source_kbps):
     if source_kbps <= 0:
         return '192k'
     ceil = source_kbps * 1.10
-    for k in reversed(CBR_LADDER):
-        if k <= ceil:
+    for k in CBR_LADDER:
+        if k >= ceil:
             return f'{k}k'
-    return '64k'
+    return f'{CBR_LADDER[-1]}k'
 
 def pick_vbr_quality(source_kbps):
     """Software path: VBR quality level matching source + 10% buffer. Returns (q, kbps)."""
