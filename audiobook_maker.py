@@ -189,7 +189,7 @@ def _ask_optional(prompt):
 
 def _ask_path(prompt, is_dir=False):
     while True:
-        p = os.path.expanduser(_ask(prompt))
+        p = os.path.expanduser(_ask(prompt).strip('\'"'))
         if is_dir and not os.path.isdir(p):
             print("  Directory not found, try again.")
             continue
@@ -626,11 +626,17 @@ def mode_folder(encoder_info):
     _sep('AUDIOBOOK DETAILS')
     title = ask_title(folder.name)
 
+    IMAGE_EXTS = {'.jpg', '.jpeg', '.png'}
+    cover_images = [f for f in folder.iterdir() if f.suffix.lower() in IMAGE_EXTS]
     cover_path = None
-    choice = _ask('Do you have a cover image?  (yes / no)', default='no',
-                  valid=['yes', 'no', 'y', 'n'])
-    if choice in ('yes', 'y'):
-        cover_path = _ask_path('Path to cover image (JPG or PNG)')
+    if len(cover_images) == 1:
+        cover_path = cover_images[0]
+        _ok(f'Cover image detected: {cover_path.name}')
+    else:
+        choice = _ask('Do you have a cover image?  (yes / no)', default='no',
+                      valid=['yes', 'no', 'y', 'n'])
+        if choice in ('yes', 'y'):
+            cover_path = _ask_path('Path to cover image (JPG or PNG)')
 
     meta = ask_metadata()
     meta['title'] = title
@@ -1114,12 +1120,31 @@ def main():
         '3': mode_playlist,
         '4': mode_spreadsheet,
     }
-    dispatch[choice](encoder_info)
+    while True:
+        dispatch[choice](encoder_info)
 
-    elapsed = time.time() - t0
-    print(f'\n  Total time : {str(timedelta(seconds=int(elapsed)))}')
-    print()
-    notify()
+        elapsed = time.time() - t0
+        print(f'\n  Total time : {str(timedelta(seconds=int(elapsed)))}')
+        print()
+        notify()
+
+        again = _ask('\n  Make another audiobook?  (yes / no)', default='no',
+                     valid=['yes', 'no', 'y', 'n'])
+        if again not in ('yes', 'y'):
+            print('\n  Done. Goodbye!\n')
+            break
+
+        # Re-show mode menu for the next run
+        t0 = time.time()
+        _sep('WHAT WOULD YOU LIKE TO DO?')
+        _box([
+            '1.  Folder of audio files  →  audiobook',
+            '2.  YouTube video          →  audiobook',
+            '3.  YouTube playlist       →  ONE audiobook  (each video = chapter)',
+            '4.  Spreadsheet            →  ONE audiobook  (each row  = chapter)',
+            '    Excel / CSV with title + YouTube URL columns',
+        ])
+        choice = _ask('Choice', valid=['1', '2', '3', '4'])
 
 
 if __name__ == '__main__':
