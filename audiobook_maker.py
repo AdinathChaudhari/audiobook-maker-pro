@@ -113,6 +113,9 @@ from tqdm import tqdm
 import yt_dlp
 import pandas as pd
 
+# Browser to pull YouTube cookies from (set in main() for YT modes)
+_COOKIE_BROWSER = None
+
 # ═════════════════════════════════════════════════════════════════════════════
 #  CONSTANTS & DETECTION
 # ═════════════════════════════════════════════════════════════════════════════
@@ -753,9 +756,15 @@ class _Q:
     def warning(self, m): pass
     def error(self, m): pass
 
+def _cookie_opts():
+    """Return yt-dlp cookiesfrombrowser option if a browser is selected."""
+    if _COOKIE_BROWSER:
+        return {'cookiesfrombrowser': (_COOKIE_BROWSER, None, None, None)}
+    return {}
+
 def _ytdlp_info(url, flat=False):
     opts = {'quiet': True, 'no_warnings': True, 'logger': _Q(), 'extract_flat': flat,
-            'remote_components': ['ejs:github']}
+            'remote_components': ['ejs:github'], **_cookie_opts()}
     with yt_dlp.YoutubeDL(opts) as ydl:
         return ydl.extract_info(url, download=False)
 
@@ -810,17 +819,28 @@ def _download_audio(url, dest_path, label='', cache_stem=None):
         elif d['status'] == 'finished':
             pbar.n = 100; pbar.refresh()
 
-    opts = {
-        'format': fmt,
-        'outtmpl': str(dest_path) + '.%(ext)s',
-        'ffmpeg_location': FFMPEG,
-        'progress_hooks': [hook],
-        'quiet': True, 'no_warnings': True, 'logger': _Q(),
-        'postprocessors': [],
-        'remote_components': ['ejs:github'],
-    }
-    with yt_dlp.YoutubeDL(opts) as ydl:
-        ydl.download([url])
+    def _attempt(with_cookies):
+        opts = {
+            'format': fmt,
+            'outtmpl': str(dest_path) + '.%(ext)s',
+            'ffmpeg_location': FFMPEG,
+            'progress_hooks': [hook],
+            'quiet': True, 'no_warnings': True, 'logger': _Q(),
+            'postprocessors': [],
+            'remote_components': ['ejs:github'],
+            **(_cookie_opts() if with_cookies else {}),
+        }
+        with yt_dlp.YoutubeDL(opts) as ydl:
+            ydl.download([url])
+
+    try:
+        _attempt(with_cookies=True)
+    except Exception:
+        if _COOKIE_BROWSER:
+            _warn('Cookie download failed — retrying without cookies…')
+            _attempt(with_cookies=False)
+        else:
+            raise
     pbar.close()
 
     parent = Path(dest_path).parent
@@ -839,6 +859,7 @@ def _download_thumbnail(url, dest_folder, stem):
         'ffmpeg_location': FFMPEG,
         'quiet': True, 'no_warnings': True, 'logger': _Q(),
         'remote_components': ['ejs:github'],
+        **_cookie_opts(),
     }
     with yt_dlp.YoutubeDL(opts) as ydl:
         try: ydl.download([url])
@@ -1212,6 +1233,26 @@ def main():
 
     choice = _ask('Choice', valid=['1', '2', '3', '4', '5'])
 
+    # Browser cookie prompt — only relevant for YouTube modes
+    global _COOKIE_BROWSER
+    if choice in ('2', '3', '4'):
+        _sep('YOUTUBE AUTHENTICATION')
+        _box([
+            'Use browser cookies to access private / Premium videos.',
+            'Skip (press Enter) for public videos only.',
+        ])
+        BROWSERS = ['safari', 'chrome', 'firefox', 'edge', 'brave', 'opera']
+        for i, b in enumerate(BROWSERS, 1):
+            print(f'  {i}.  {b.capitalize()}')
+        print('  0.  No cookies  (public only)')
+        bchoice = input('\n  Browser [0]: ').strip() or '0'
+        if bchoice in [str(i) for i in range(1, len(BROWSERS) + 1)]:
+            _COOKIE_BROWSER = BROWSERS[int(bchoice) - 1]
+            _ok(f'Using cookies from {_COOKIE_BROWSER.capitalize()}')
+        else:
+            _COOKIE_BROWSER = None
+            _info('No cookies — public videos only')
+
     dispatch = {
         '1': mode_folder,
         '2': mode_single_video,
@@ -1245,6 +1286,24 @@ def main():
             '5.  Parent folder of subfolders   →  one audiobook per subfolder',
         ])
         choice = _ask('Choice', valid=['1', '2', '3', '4', '5'])
+
+        if choice in ('2', '3', '4'):
+            _sep('YOUTUBE AUTHENTICATION')
+            _box([
+                'Use browser cookies to access private / Premium videos.',
+                'Skip (press Enter) for public videos only.',
+            ])
+            BROWSERS = ['safari', 'chrome', 'firefox', 'edge', 'brave', 'opera']
+            for i, b in enumerate(BROWSERS, 1):
+                print(f'  {i}.  {b.capitalize()}')
+            print('  0.  No cookies  (public only)')
+            bchoice = input('\n  Browser [0]: ').strip() or '0'
+            if bchoice in [str(i) for i in range(1, len(BROWSERS) + 1)]:
+                _COOKIE_BROWSER = BROWSERS[int(bchoice) - 1]
+                _ok(f'Using cookies from {_COOKIE_BROWSER.capitalize()}')
+            else:
+                _COOKIE_BROWSER = None
+                _info('No cookies — public videos only')
 
 
 if __name__ == '__main__':
