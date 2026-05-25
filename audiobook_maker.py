@@ -1101,12 +1101,7 @@ def _run_per_video(entries, encoder_info):
 
 
 def _pick_videos_from_playlist(entries, pl_title, encoder_info):
-    """Show a numbered video list and let the user select one or more."""
-    _sep('SELECT VIDEOS')
-    for i, e in enumerate(entries, 1):
-        print(f'  {i:>3}.  {e.get("title", f"Video {i}")}')
-    print()
-
+    """Let the user select one or more videos from an already-displayed list."""
     raw    = input('  Enter video numbers (e.g. 1,3,5-8): ').strip()
     chosen = _parse_selection(raw, len(entries))
     if not chosen:
@@ -1174,6 +1169,12 @@ def _handle_playlist(entries, pl_title, encoder_info, detected=False):
     mode 3 (explicit playlist input).  `detected=True` changes the opening
     wording to indicate the playlist was auto-detected rather than chosen.
     """
+    # Always show the video list first so the user can make an informed choice.
+    _sep('PLAYLIST VIDEOS')
+    for i, e in enumerate(entries, 1):
+        print(f'  {i:>3}.  {e.get("title", f"Video {i}")}')
+    print()
+
     if detected:
         _warn('Playlist URL detected — this is not a single video.')
         print('  How would you like to proceed?\n')
