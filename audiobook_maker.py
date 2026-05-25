@@ -4,11 +4,11 @@ Audiobook Maker — Universal Converter
 ======================================
 Five workflows, one interactive tool:
 
-  1. Folder         → M4B  (local audio files as chapters)
-  2. YT Video       → M4B  (single video)
-  3. YT Playlist    → M4B  (choose combined book / pick videos / one per video)
-  4. Spreadsheet    → M4B  (Excel/CSV with title + URL columns)
-  5. Parent Folder  → M4B  (each subfolder becomes one audiobook — batch mode)
+  1. YT Video       → M4B  (single video; playlist URL auto-detected)
+  2. YT Playlist    → M4B  (combined book / pick videos / one per video)
+  3. Folder         → M4B  (local audio files as chapters)
+  4. Parent Folder  → M4B  (each subfolder becomes one audiobook — batch mode)
+  5. Spreadsheet    → M4B  (Excel/CSV with title + URL columns)
 
 Run:
     python audiobook_maker.py
@@ -1439,7 +1439,7 @@ def main():
     print()
     print('  ╔' + '═' * W + '╗')
     print('  ║' + '  A U D I O B O O K   M A K E R   P R O'.center(W) + '║')
-    print('  ║' + 'Folder · YT Video · YT Playlist · Spreadsheet'.center(W) + '║')
+    print('  ║' + 'YT Video · YT Playlist · Folder · Spreadsheet'.center(W) + '║')
     print('  ╚' + '═' * W + '╝')
 
     # Encoder detection
@@ -1453,19 +1453,19 @@ def main():
     # Mode selection
     _sep('WHAT WOULD YOU LIKE TO DO?')
     _box([
-        '1.  Folder of audio files    →  audiobook',
-        '2.  YouTube video            →  audiobook  (playlist URL auto-detected)',
-        '3.  YouTube playlist         →  combined / pick videos / one per video',
-        '4.  Spreadsheet              →  ONE audiobook  (each row = chapter)',
+        '1.  YouTube video            →  audiobook  (playlist URL auto-detected)',
+        '2.  YouTube playlist         →  combined / pick videos / one per video',
+        '3.  Folder of audio files    →  audiobook',
+        '4.  Parent folder            →  one audiobook per subfolder  (batch)',
+        '5.  Spreadsheet              →  ONE audiobook  (each row = chapter)',
         '    Excel / CSV with title + YouTube URL columns',
-        '5.  Parent folder            →  one audiobook per subfolder  (batch)',
     ])
 
     choice = _ask('Choice', valid=['1', '2', '3', '4', '5'])
 
     # Browser cookie prompt — only relevant for YouTube modes
     global _COOKIE_BROWSER
-    if choice in ('2', '3', '4'):
+    if choice in ('1', '2', '5'):
         _sep('YOUTUBE AUTHENTICATION')
         _box([
             'Use browser cookies to access private / Premium videos.',
@@ -1488,11 +1488,11 @@ def main():
             _info('No cookies — public videos only')
 
     dispatch = {
-        '1': mode_folder,
-        '2': mode_single_video,
-        '3': mode_playlist,
-        '4': mode_spreadsheet,
-        '5': mode_batch_folder,
+        '1': mode_single_video,
+        '2': mode_playlist,
+        '3': mode_folder,
+        '4': mode_batch_folder,
+        '5': mode_spreadsheet,
     }
     while True:
         dispatch[choice](encoder_info)
@@ -1512,16 +1512,16 @@ def main():
         t0 = time.time()
         _sep('WHAT WOULD YOU LIKE TO DO?')
         _box([
-            '1.  Folder of audio files    →  audiobook',
-            '2.  YouTube video            →  audiobook  (playlist URL auto-detected)',
-            '3.  YouTube playlist         →  combined / pick videos / one per video',
-            '4.  Spreadsheet              →  ONE audiobook  (each row = chapter)',
+            '1.  YouTube video            →  audiobook  (playlist URL auto-detected)',
+            '2.  YouTube playlist         →  combined / pick videos / one per video',
+            '3.  Folder of audio files    →  audiobook',
+            '4.  Parent folder            →  one audiobook per subfolder  (batch)',
+            '5.  Spreadsheet              →  ONE audiobook  (each row = chapter)',
             '    Excel / CSV with title + YouTube URL columns',
-            '5.  Parent folder            →  one audiobook per subfolder  (batch)',
         ])
         choice = _ask('Choice', valid=['1', '2', '3', '4', '5'])
 
-        if choice in ('2', '3', '4'):
+        if choice in ('1', '2', '5'):
             _sep('YOUTUBE AUTHENTICATION')
             _box([
                 'Use browser cookies to access private / Premium videos.',
