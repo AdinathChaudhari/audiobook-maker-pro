@@ -27,7 +27,7 @@ One script. Fully interactive. No config files needed.
 | # | Input | Output |
 |---|-------|--------|
 | 1 | Folder of `.mp3` / `.m4a` / `.wav` etc. | Single `.m4b` with chapters |
-| 2 | YouTube video URL | Single `.m4b` |
+| 2 | YouTube video URL | Single `.m4b` — YouTube chapters become audiobook chapters |
 | 3 | YouTube playlist URL | Single `.m4b` — each video is one chapter |
 | 4 | Excel / CSV — title column + URL column | Single `.m4b` — each row is one chapter |
 | 5 | Parent folder containing subfolders | One `.m4b` per subfolder (batch mode) |
