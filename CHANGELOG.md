@@ -6,6 +6,13 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [1.3.0] — 2026-05-25
+
+### Added
+- **Playlist URL detection in mode 2**: when a playlist URL is pasted instead of a single video URL (common when copying a link from within a playlist), the tool detects it and offers two paths: process the whole playlist as one audiobook, or browse and pick individual videos from a numbered list. Ranges are supported (`1,3,5-8`). If multiple videos are picked, the user can combine them into one audiobook (each video = chapter) or make one separate audiobook per video.
+- **Per-video output in mode 3**: after selecting which videos to process, mode 3 now asks whether to produce one combined audiobook (previous behaviour) or one `.m4b` per video.
+- **Thumbnail cover default for per-video output**: when producing one audiobook per video, each book automatically uses that video's YouTube thumbnail as cover art — no prompt needed.
+
 ## [1.2.0] — 2026-05-25
 
 ### Added

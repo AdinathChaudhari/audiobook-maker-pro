@@ -961,12 +961,238 @@ def _fetch_playlist(url):
     return entries, title
 
 # ═════════════════════════════════════════════════════════════════════════════
+#  MODE 2 / 3 SHARED HELPERS
+# ═════════════════════════════════════════════════════════════════════════════
+
+def _is_playlist_url(url: str) -> bool:
+    """True when url carries a playlist ID but no per-video index param."""
+    from urllib.parse import urlparse, parse_qs
+    qs = parse_qs(urlparse(url).query)
+    return 'list' in qs and 'index' not in qs
+
+
+def _parse_selection(s: str, max_n: int) -> list:
+    """Parse a selection string like '1,3,5-8' into a sorted list of 1-based indices."""
+    indices = set()
+    for part in s.split(','):
+        part = part.strip()
+        if not part:
+            continue
+        if '-' in part:
+            a, b = part.split('-', 1)
+            indices.update(range(int(a), int(b) + 1))
+        else:
+            indices.add(int(part))
+    return sorted(i for i in indices if 1 <= i <= max_n)
+
+
+def _vurl(entry) -> str:
+    return entry.get('webpage_url') or f"https://www.youtube.com/watch?v={entry['id']}"
+
+
+def _run_playlist_to_one(entries, pl_title, encoder_info):
+    """Download all entries and stitch into a single M4B (shared by mode 2 & 3)."""
+    _sep('AUDIOBOOK DETAILS')
+    title = ask_title(pl_title)
+
+    raw_titles     = [e.get('title', f'Video {i+1}') for i, e in enumerate(entries)]
+    namer          = ask_chapter_naming(raw_titles)
+    chapter_titles = [namer(i + 1, t) for i, t in enumerate(raw_titles)]
+
+    cv = _ask('Cover — first thumbnail (F), last thumbnail (L), or your own (C)?',
+              default='F', valid=['F', 'f', 'L', 'l', 'C', 'c'])
+
+    meta = ask_metadata()
+    meta['title'] = title
+
+    suggested_out = str(Path(os.getcwd()) / f'{sanitize(title)}.m4b')
+    out_in = _ask_optional(f'Output path  [{suggested_out}]')
+    output_path = Path(out_in or suggested_out)
+
+    with tempfile.TemporaryDirectory() as _tmp:
+        tmp                  = Path(_tmp)
+        audio_files          = []
+        chapter_titles_final = []
+        failed               = []
+
+        _sep('DOWNLOADING')
+        cover_path = None
+        if cv.lower() == 'c':
+            cover_path = _ask_path('Path to cover image (JPG or PNG)')
+        else:
+            thumb_entry = entries[-1] if cv.lower() == 'l' else entries[0]
+            _info('Downloading cover…')
+            cover_path = _download_thumbnail(_vurl(thumb_entry), tmp, 'cover')
+            if cover_path: _ok('Cover saved')
+
+        total = len(entries)
+        print()
+        overall = tqdm(total=total, unit='track', ncols=W + 4,
+                       bar_format='  Overall  {bar}| {n_fmt}/{total_fmt} tracks  [{elapsed}<{remaining}]')
+
+        for i, entry in enumerate(entries, 1):
+            url    = _vurl(entry)
+            vtitle = entry.get('title', f'Video {i}')
+            label  = vtitle[:28] + '…' if len(vtitle) > 30 else vtitle
+            stem   = _dl_cache_stem(url, i)
+            af     = _download_audio(url, tmp / f'{i:04d}', label=f'[{i}/{total}] {label}',
+                                     cache_stem=stem)
+            if af and af.exists():
+                audio_files.append(af)
+                chapter_titles_final.append(chapter_titles[i - 1])
+            else:
+                failed.append(i)
+            overall.update(1)
+        overall.close()
+
+        if failed:
+            _warn(f'{len(failed)} download(s) failed and were skipped: {failed}')
+        if not audio_files:
+            print('\n  No audio downloaded. Aborting.\n'); sys.exit(1)
+
+        build_m4b(audio_files, chapter_titles_final,
+                  output_path, cover_path, meta, encoder_info)
+
+
+def _run_per_video(entries, encoder_info):
+    """Encode each entry as its own M4B — thumbnail cover, shared metadata."""
+    _sep('AUDIOBOOK DETAILS  (applied to all books)')
+    meta = ask_metadata()
+
+    total = len(entries)
+    for i, entry in enumerate(entries, 1):
+        url    = _vurl(entry)
+        vtitle = entry.get('title', f'Video {i}')
+        _sep(f'VIDEO {i}/{total}')
+
+        title = ask_title(vtitle)
+        suggested_out = str(Path(os.getcwd()) / f'{sanitize(title)}.m4b')
+        out_in = _ask_optional(f'Output path  [{suggested_out}]')
+        output_path = Path(out_in or suggested_out)
+
+        this_meta = dict(meta)
+        this_meta['title'] = title
+
+        with tempfile.TemporaryDirectory() as _tmp:
+            tmp  = Path(_tmp)
+            stem = sanitize(vtitle)
+
+            _sep('DOWNLOADING')
+            _info('Downloading thumbnail…')
+            cover_path = _download_thumbnail(url, tmp, stem + '_thumb')
+            if cover_path:
+                _ok('Thumbnail saved')
+
+            audio_file = _download_audio(url, tmp / stem, label=f'[{i}/{total}] Audio')
+            if not audio_file or not audio_file.exists():
+                _warn(f'Download failed for "{vtitle}" — skipping.')
+                continue
+            _ok('Audio downloaded')
+
+            yt_chaps = entry.get('chapters') or []
+            use_yt_chapters = None
+            if yt_chaps:
+                ans = _ask(f'Use the {len(yt_chaps)} YouTube chapters? (Y/N)',
+                           default='Y', valid=['Y', 'y', 'N', 'n'])
+                use_yt_chapters = yt_chaps if ans.upper() == 'Y' else None
+
+            build_m4b([audio_file], [title], output_path, cover_path,
+                      this_meta, encoder_info, yt_chapters=use_yt_chapters)
+
+
+def _mode2_pick_from_playlist(url, encoder_info):
+    """Mode 2 sub-flow: user picks one or more videos from a detected playlist."""
+    entries, pl_title = _fetch_playlist(url)
+    _box([f'Playlist : {pl_title}', f'Videos   : {len(entries)}'])
+
+    _sep('SELECT VIDEOS')
+    for i, e in enumerate(entries, 1):
+        print(f'  {i:>3}.  {e.get("title", f"Video {i}")}')
+    print()
+
+    raw = input('  Enter video numbers (e.g. 1,3,5-8): ').strip()
+    chosen = _parse_selection(raw, len(entries))
+    if not chosen:
+        print('\n  No valid selection. Aborting.\n'); sys.exit(1)
+
+    selected = [entries[i - 1] for i in chosen]
+    _ok(f'{len(selected)} video(s) selected')
+
+    if len(selected) == 1:
+        # Single pick — run full single-video flow for that URL
+        entry  = selected[0]
+        sv_url = _vurl(entry)
+        _info('Fetching video info…')
+        info      = _ytdlp_info(sv_url)
+        yt_title  = info.get('title', entry.get('title', 'YouTube_Video'))
+        duration  = info.get('duration', 0)
+        yt_chaps  = info.get('chapters') or []
+        box_lines = [f'Title    : {yt_title}', f'Duration : {ms_to_hms(duration * 1000)}']
+        if yt_chaps:
+            box_lines.append(f'Chapters : {len(yt_chaps)} found in video')
+        _box(box_lines)
+
+        use_yt_chapters = None
+        if yt_chaps:
+            ans = _ask(f'Use the {len(yt_chaps)} YouTube chapters as audiobook chapters? (Y/N)',
+                       default='Y', valid=['Y', 'y', 'N', 'n'])
+            use_yt_chapters = yt_chaps if ans.upper() == 'Y' else None
+
+        _sep('AUDIOBOOK DETAILS')
+        title = ask_title(yt_title)
+        cv = _ask('Cover — YouTube thumbnail (T) or your own image (C)?',
+                  default='T', valid=['T', 't', 'C', 'c'])
+        cover_path = _ask_path('Path to cover image (JPG or PNG)') if cv.lower() == 'c' else None
+        meta = ask_metadata()
+        meta['title'] = title
+        suggested_out = str(Path(os.getcwd()) / f'{sanitize(title)}.m4b')
+        out_in = _ask_optional(f'Output path  [{suggested_out}]')
+        output_path = Path(out_in or suggested_out)
+
+        with tempfile.TemporaryDirectory() as _tmp:
+            tmp  = Path(_tmp)
+            stem = sanitize(yt_title)
+            _sep('DOWNLOADING')
+            if cover_path is None:
+                _info('Downloading thumbnail…')
+                cover_path = _download_thumbnail(sv_url, tmp, stem + '_thumb')
+                if cover_path: _ok('Thumbnail saved')
+            audio_file = _download_audio(sv_url, tmp / stem, label='Audio')
+            if not audio_file or not audio_file.exists():
+                print('\n  Download failed.\n'); sys.exit(1)
+            _ok('Audio downloaded')
+            build_m4b([audio_file], [title], output_path, cover_path, meta, encoder_info,
+                      yt_chapters=use_yt_chapters)
+        return
+
+    # Multiple videos selected
+    combo = _ask('One combined audiobook (O) or one audiobook per video (E)?',
+                 default='O', valid=['O', 'o', 'E', 'e'])
+    if combo.upper() == 'O':
+        _run_playlist_to_one(selected, pl_title, encoder_info)
+    else:
+        _run_per_video(selected, encoder_info)
+
+
+# ═════════════════════════════════════════════════════════════════════════════
 #  MODE 2: SINGLE YOUTUBE VIDEO → ONE AUDIOBOOK
 # ═════════════════════════════════════════════════════════════════════════════
 
 def mode_single_video(encoder_info):
     _sep('YOUTUBE VIDEO → AUDIOBOOK')
     url = _ask('YouTube video URL')
+
+    if _is_playlist_url(url):
+        _warn('Playlist URL detected.')
+        route = _ask('Process whole playlist (P) or pick video(s) from it (V)?',
+                     default='P', valid=['P', 'p', 'V', 'v'])
+        if route.upper() == 'P':
+            entries, pl_title = _fetch_playlist(url)
+            _box([f'Playlist : {pl_title}', f'Videos   : {len(entries)}'])
+            _run_playlist_to_one(entries, pl_title, encoder_info)
+        else:
+            _mode2_pick_from_playlist(url, encoder_info)
+        return
 
     _info('Fetching video info…')
     info       = _ytdlp_info(url)
@@ -1022,13 +1248,10 @@ def mode_single_video(encoder_info):
 # ═════════════════════════════════════════════════════════════════════════════
 
 def mode_playlist(encoder_info):
-    _sep('YOUTUBE PLAYLIST → ONE AUDIOBOOK')
+    _sep('YOUTUBE PLAYLIST → AUDIOBOOK')
     url             = _ask('YouTube playlist URL')
     entries, pl_title = _fetch_playlist(url)
     _box([f'Playlist : {pl_title}', f'Videos   : {len(entries)}'])
-
-    _sep('AUDIOBOOK DETAILS')
-    title = ask_title(pl_title)
 
     all_choice = _ask('Process all videos (A) or a subset (S)?',
                       default='A', valid=['A', 'a', 'S', 's'])
@@ -1038,68 +1261,13 @@ def mode_playlist(encoder_info):
         entries = entries[start - 1:end]
         _ok(f'Selected {len(entries)} video(s)')
 
-    raw_titles     = [e.get('title', f'Video {i+1}') for i, e in enumerate(entries)]
-    namer          = ask_chapter_naming(raw_titles)
-    chapter_titles = [namer(i + 1, t) for i, t in enumerate(raw_titles)]
+    output_mode = _ask('Output — one combined audiobook (O) or one audiobook per video (E)?',
+                       default='O', valid=['O', 'o', 'E', 'e'])
+    if output_mode.upper() == 'E':
+        _run_per_video(entries, encoder_info)
+        return
 
-    cv = _ask('Cover — first thumbnail (F), last thumbnail (L), or your own (C)?',
-              default='F', valid=['F', 'f', 'L', 'l', 'C', 'c'])
-
-    meta = ask_metadata()
-    meta['title'] = title
-
-    suggested_out = str(Path(os.getcwd()) / f'{sanitize(title)}.m4b')
-    out_in = _ask_optional(f'Output path  [{suggested_out}]')
-    output_path = Path(out_in or suggested_out)
-
-    with tempfile.TemporaryDirectory() as _tmp:
-        tmp                  = Path(_tmp)
-        audio_files          = []
-        chapter_titles_final = []
-        failed               = []
-
-        # Cover
-        _sep('DOWNLOADING')
-        cover_path = None
-        if cv.lower() == 'c':
-            cover_path = _ask_path('Path to cover image (JPG or PNG)')
-        else:
-            thumb_entry = entries[-1] if cv.lower() == 'l' else entries[0]
-            thumb_url   = (thumb_entry.get('webpage_url') or
-                           f"https://www.youtube.com/watch?v={thumb_entry['id']}")
-            _info('Downloading cover…')
-            cover_path = _download_thumbnail(thumb_url, tmp, 'cover')
-            if cover_path: _ok('Cover saved')
-
-        # Audio tracks — overall progress bar
-        total = len(entries)
-        print()
-        overall = tqdm(total=total, unit='track', ncols=W + 4,
-                       bar_format='  Overall  {bar}| {n_fmt}/{total_fmt} tracks  [{elapsed}<{remaining}]')
-
-        for i, entry in enumerate(entries, 1):
-            vurl   = (entry.get('webpage_url') or
-                      f"https://www.youtube.com/watch?v={entry['id']}")
-            vtitle = entry.get('title', f'Video {i}')
-            label  = vtitle[:28] + '…' if len(vtitle) > 30 else vtitle
-            stem   = _dl_cache_stem(vurl, i)
-            af     = _download_audio(vurl, tmp / f'{i:04d}', label=f'[{i}/{total}] {label}',
-                                     cache_stem=stem)
-            if af and af.exists():
-                audio_files.append(af)
-                chapter_titles_final.append(chapter_titles[i - 1])
-            else:
-                failed.append(i)
-            overall.update(1)
-        overall.close()
-
-        if failed:
-            _warn(f'{len(failed)} download(s) failed and were skipped: {failed}')
-        if not audio_files:
-            print('\n  No audio downloaded. Aborting.\n'); sys.exit(1)
-
-        build_m4b(audio_files, chapter_titles_final,
-                  output_path, cover_path, meta, encoder_info)
+    _run_playlist_to_one(entries, pl_title, encoder_info)
 
 # ═════════════════════════════════════════════════════════════════════════════
 #  MODE 4: SPREADSHEET (Excel / CSV) → ONE AUDIOBOOK
