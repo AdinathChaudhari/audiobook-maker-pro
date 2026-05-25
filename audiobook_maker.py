@@ -965,10 +965,10 @@ def _fetch_playlist(url):
 # ═════════════════════════════════════════════════════════════════════════════
 
 def _is_playlist_url(url: str) -> bool:
-    """True when url carries a playlist ID but no per-video index param."""
+    """True when url carries a playlist ID (index= param doesn't change that)."""
     from urllib.parse import urlparse, parse_qs
     qs = parse_qs(urlparse(url).query)
-    return 'list' in qs and 'index' not in qs
+    return 'list' in qs
 
 
 def _parse_selection(s: str, max_n: int) -> list:
