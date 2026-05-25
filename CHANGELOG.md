@@ -15,6 +15,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   - **E** — one separate audiobook per video (each gets its own thumbnail cover automatically)
 - **Wording adapts to context**: mode 2 says "Playlist URL detected — this is not a single video" while mode 3 says "How would you like to process this playlist?" — same logic, appropriate framing.
 
+### Changed
+- Module docstring updated to reflect that mode 2 handles both single videos and accidental playlist URLs via the shared handler.
+
 ## [1.2.0] — 2026-05-25
 
 ### Added

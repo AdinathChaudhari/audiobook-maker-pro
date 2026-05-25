@@ -5,8 +5,7 @@ Audiobook Maker — Universal Converter
 Five workflows, one interactive tool:
 
   1. Folder         → M4B  (local audio files as chapters)
-  2. YT Video       → M4B  (single video, or playlist URL auto-detected:
-                             choose combined book / pick videos / one per video)
+  2. YT Video       → M4B  (single video)
   3. YT Playlist    → M4B  (choose combined book / pick videos / one per video)
   4. Spreadsheet    → M4B  (Excel/CSV with title + URL columns)
   5. Parent Folder  → M4B  (each subfolder becomes one audiobook — batch mode)
