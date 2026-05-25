@@ -624,7 +624,7 @@ def build_m4b(audio_paths, chapter_titles, output_path, cover_path, metadata, en
     return output_path
 
 # ═════════════════════════════════════════════════════════════════════════════
-#  MODE 1: FOLDER → AUDIOBOOK
+#  MODE 3: FOLDER → AUDIOBOOK
 # ═════════════════════════════════════════════════════════════════════════════
 
 def mode_folder(encoder_info):
@@ -673,7 +673,7 @@ def mode_folder(encoder_info):
     build_m4b(files, chapter_titles, output_path, cover_path, meta, encoder_info)
 
 # ═════════════════════════════════════════════════════════════════════════════
-#  BATCH FOLDER MODE
+#  MODE 4: PARENT FOLDER → ONE AUDIOBOOK PER SUBFOLDER  (batch)
 # ═════════════════════════════════════════════════════════════════════════════
 
 def mode_batch_folder(encoder_info):
@@ -973,7 +973,7 @@ def _fetch_playlist(url):
     return entries, title
 
 # ═════════════════════════════════════════════════════════════════════════════
-#  MODE 2 / 3 SHARED HELPERS
+#  MODE 1 / 2 SHARED HELPERS
 # ═════════════════════════════════════════════════════════════════════════════
 
 def _is_playlist_url(url: str) -> bool:
@@ -1208,8 +1208,7 @@ def _handle_playlist(entries, pl_title, encoder_info, detected=False):
 
 
 # ═════════════════════════════════════════════════════════════════════════════
-#  MODE 2: YOUTUBE VIDEO → AUDIOBOOK
-#  Accepts a single video URL or a playlist URL (auto-detected).
+#  MODE 1: YOUTUBE VIDEO → AUDIOBOOK
 # ═════════════════════════════════════════════════════════════════════════════
 
 def mode_single_video(encoder_info):
@@ -1288,8 +1287,7 @@ def mode_single_video(encoder_info):
                   yt_chapters=use_yt_chapters)
 
 # ═════════════════════════════════════════════════════════════════════════════
-#  MODE 3: YOUTUBE PLAYLIST → AUDIOBOOK
-#  Offers: one combined book, pick specific videos, or one book per video.
+#  MODE 2: YOUTUBE PLAYLIST → AUDIOBOOK
 # ═════════════════════════════════════════════════════════════════════════════
 
 def mode_playlist(encoder_info):
@@ -1309,7 +1307,7 @@ def mode_playlist(encoder_info):
     _handle_playlist(entries, pl_title, encoder_info, detected=False)
 
 # ═════════════════════════════════════════════════════════════════════════════
-#  MODE 4: SPREADSHEET (Excel / CSV) → ONE AUDIOBOOK
+#  MODE 5: SPREADSHEET (Excel / CSV) → ONE AUDIOBOOK
 # ═════════════════════════════════════════════════════════════════════════════
 
 def mode_spreadsheet(encoder_info):
@@ -1453,7 +1451,7 @@ def main():
     # Mode selection
     _sep('WHAT WOULD YOU LIKE TO DO?')
     _box([
-        '1.  YouTube video            →  audiobook  (playlist URL auto-detected)',
+        '1.  YouTube video            →  audiobook',
         '2.  YouTube playlist         →  combined / pick videos / one per video',
         '3.  Folder of audio files    →  audiobook',
         '4.  Parent folder            →  one audiobook per subfolder  (batch)',
@@ -1512,7 +1510,7 @@ def main():
         t0 = time.time()
         _sep('WHAT WOULD YOU LIKE TO DO?')
         _box([
-            '1.  YouTube video            →  audiobook  (playlist URL auto-detected)',
+            '1.  YouTube video            →  audiobook',
             '2.  YouTube playlist         →  combined / pick videos / one per video',
             '3.  Folder of audio files    →  audiobook',
             '4.  Parent folder            →  one audiobook per subfolder  (batch)',

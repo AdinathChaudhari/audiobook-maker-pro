@@ -26,7 +26,7 @@ One script. Fully interactive. No config files needed.
 
 | # | Input | Output |
 |---|-------|--------|
-| 1 | YouTube video URL | Single `.m4b` — YouTube chapters auto-detected. Playlist URL auto-detected with P/V prompt |
+| 1 | YouTube video URL | Single `.m4b` — YouTube chapters embedded automatically |
 | 2 | YouTube playlist URL | Three options: one combined `.m4b`, pick specific videos, or one `.m4b` per video |
 | 3 | Folder of `.mp3` / `.m4a` / `.wav` etc. | Single `.m4b` with chapters |
 | 4 | Parent folder containing subfolders | One `.m4b` per subfolder (batch mode) |
