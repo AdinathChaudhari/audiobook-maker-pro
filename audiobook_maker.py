@@ -966,10 +966,10 @@ def _fetch_playlist(url):
     _ok(f'{len(flat_ids)} visible videos found')
 
     _info('Fetching full metadata (may take a moment)…')
-    full    = _ytdlp_info(pl_url, flat=False)
+    full    = _ytdlp_info(url, flat=False)
     entries = [e for e in full.get('entries', []) if e and e.get('id') in flat_ids]
     entries.sort(key=lambda e: int(e.get('playlist_index') or 0))
-    _save_cache(pl_url, entries, title)
+    _save_cache(url, entries, title)
     return entries, title
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -1437,12 +1437,12 @@ def main():
     # Mode selection
     _sep('WHAT WOULD YOU LIKE TO DO?')
     _box([
-        '1.  Folder of audio files         →  audiobook',
-        '2.  YouTube video                 →  audiobook',
-        '3.  YouTube playlist              →  ONE audiobook  (each video = chapter)',
-        '4.  Spreadsheet                   →  ONE audiobook  (each row  = chapter)',
+        '1.  Folder of audio files    →  audiobook',
+        '2.  YouTube video            →  audiobook  (playlist URL auto-detected)',
+        '3.  YouTube playlist         →  combined / pick videos / one per video',
+        '4.  Spreadsheet              →  ONE audiobook  (each row = chapter)',
         '    Excel / CSV with title + YouTube URL columns',
-        '5.  Parent folder of subfolders   →  one audiobook per subfolder',
+        '5.  Parent folder            →  one audiobook per subfolder  (batch)',
     ])
 
     choice = _ask('Choice', valid=['1', '2', '3', '4', '5'])
@@ -1496,12 +1496,12 @@ def main():
         t0 = time.time()
         _sep('WHAT WOULD YOU LIKE TO DO?')
         _box([
-            '1.  Folder of audio files         →  audiobook',
-            '2.  YouTube video                 →  audiobook',
-            '3.  YouTube playlist              →  ONE audiobook  (each video = chapter)',
-            '4.  Spreadsheet                   →  ONE audiobook  (each row  = chapter)',
+            '1.  Folder of audio files    →  audiobook',
+            '2.  YouTube video            →  audiobook  (playlist URL auto-detected)',
+            '3.  YouTube playlist         →  combined / pick videos / one per video',
+            '4.  Spreadsheet              →  ONE audiobook  (each row = chapter)',
             '    Excel / CSV with title + YouTube URL columns',
-            '5.  Parent folder of subfolders   →  one audiobook per subfolder',
+            '5.  Parent folder            →  one audiobook per subfolder  (batch)',
         ])
         choice = _ask('Choice', valid=['1', '2', '3', '4', '5'])
 
