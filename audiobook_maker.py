@@ -400,7 +400,7 @@ def ask_title(suggested):
 #  CORE: BUILD M4B
 # ═════════════════════════════════════════════════════════════════════════════
 
-def build_m4b(audio_paths, chapter_titles, output_path, cover_path, metadata, encoder_info, batch=False):
+def build_m4b(audio_paths, chapter_titles, output_path, cover_path, metadata, encoder_info, batch=False, yt_chapters=None):
     """
     Four-pass M4B builder:
       1. Encode each source file individually  →  per-chapter .m4a files
@@ -415,7 +415,7 @@ def build_m4b(audio_paths, chapter_titles, output_path, cover_path, metadata, en
     audio_paths = [Path(p) for p in audio_paths]
     output_path = Path(output_path)
     encoder, is_hw, enc_desc = encoder_info
-    total_chapters = len(audio_paths)
+    total_chapters = len(yt_chapters) if yt_chapters else len(audio_paths)
 
     # ── Header ────────────────────────────────────────────────────────────────
     _sep('ENCODING')
@@ -568,10 +568,16 @@ def build_m4b(audio_paths, chapter_titles, output_path, cover_path, metadata, en
                 if metadata.get('author'):
                     mf.write(f"album_artist={metadata['author']}\n")
             mf.write('\n')
-            cursor = 0
-            for title_ch, dur in zip(chapter_titles, durations_ms):
-                start = cursor; end = cursor + dur; cursor = end
-                mf.write(f'[CHAPTER]\nTIMEBASE=1/1000\nSTART={start}\nEND={end}\ntitle={title_ch}\n\n')
+            if yt_chapters:
+                for ch in yt_chapters:
+                    start = int(ch['start_time'] * 1000)
+                    end   = int(ch['end_time'] * 1000)
+                    mf.write(f'[CHAPTER]\nTIMEBASE=1/1000\nSTART={start}\nEND={end}\ntitle={ch["title"]}\n\n')
+            else:
+                cursor = 0
+                for title_ch, dur in zip(chapter_titles, durations_ms):
+                    start = cursor; end = cursor + dur; cursor = end
+                    mf.write(f'[CHAPTER]\nTIMEBASE=1/1000\nSTART={start}\nEND={end}\ntitle={title_ch}\n\n')
 
         # ── Cover ─────────────────────────────────────────────────────────────
         cover_arg = []
@@ -963,10 +969,20 @@ def mode_single_video(encoder_info):
     url = _ask('YouTube video URL')
 
     _info('Fetching video info…')
-    info     = _ytdlp_info(url)
-    yt_title = info.get('title', 'YouTube_Video')
-    duration = info.get('duration', 0)
-    _box([f'Title    : {yt_title}', f'Duration : {ms_to_hms(duration * 1000)}'])
+    info       = _ytdlp_info(url)
+    yt_title   = info.get('title', 'YouTube_Video')
+    duration   = info.get('duration', 0)
+    yt_chaps   = info.get('chapters') or []
+    box_lines  = [f'Title    : {yt_title}', f'Duration : {ms_to_hms(duration * 1000)}']
+    if yt_chaps:
+        box_lines.append(f'Chapters : {len(yt_chaps)} found in video')
+    _box(box_lines)
+
+    use_yt_chapters = None
+    if yt_chaps:
+        ans = _ask(f'Use the {len(yt_chaps)} YouTube chapters as audiobook chapters? (Y/N)',
+                   default='Y', valid=['Y', 'y', 'N', 'n'])
+        use_yt_chapters = yt_chaps if ans.upper() == 'Y' else None
 
     _sep('AUDIOBOOK DETAILS')
     title = ask_title(yt_title)
@@ -998,7 +1014,8 @@ def mode_single_video(encoder_info):
             print('\n  Download failed.\n'); sys.exit(1)
         _ok('Audio downloaded')
 
-        build_m4b([audio_file], [title], output_path, cover_path, meta, encoder_info)
+        build_m4b([audio_file], [title], output_path, cover_path, meta, encoder_info,
+                  yt_chapters=use_yt_chapters)
 
 # ═════════════════════════════════════════════════════════════════════════════
 #  MODE 3: YOUTUBE PLAYLIST → ONE STITCHED AUDIOBOOK

@@ -6,6 +6,13 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [1.2.0] — 2026-05-25
+
+### Added
+- **YouTube chapter detection (mode 2)**: when a single YouTube video has chapters defined (via timestamps in the description), the tool now detects them, shows the count in the info box, and asks whether to use them as audiobook chapters. If accepted, the exact YouTube chapter timestamps and titles are embedded directly into the `.m4b` — no need to split the video into separate tracks.
+
+---
+
 ## [1.1.0] — 2025-04-15
 
 ### Changed
