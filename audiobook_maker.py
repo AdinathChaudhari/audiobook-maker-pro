@@ -940,24 +940,36 @@ def _find_cached_download(stem):
             return f
     return None
 
+def _playlist_url(url: str) -> str:
+    """Return a clean playlist-only URL (strips v= and index= so yt-dlp fetches the full list)."""
+    from urllib.parse import urlparse, parse_qs, urlencode, urlunparse
+    p  = urlparse(url)
+    qs = parse_qs(p.query, keep_blank_values=True)
+    if 'list' not in qs:
+        return url
+    clean = urlencode({'list': qs['list'][0]})
+    return urlunparse(('https', 'www.youtube.com', '/playlist', '', clean, ''))
+
+
 def _fetch_playlist(url):
-    entries, title = _load_cache(url)
+    pl_url = _playlist_url(url)
+    entries, title = _load_cache(pl_url)
     if entries:
         _ok(f'Loaded {len(entries)} entries from cache')
         return entries, title
 
     _info('Fetching playlist info…')
-    flat     = _ytdlp_info(url, flat=True)
+    flat     = _ytdlp_info(pl_url, flat=True)
     title    = flat.get('title', 'Playlist')
     flat_ids = {e['id'] for e in flat.get('entries', [])
                 if e and e.get('title') not in ('Private video', 'Deleted video')}
     _ok(f'{len(flat_ids)} visible videos found')
 
     _info('Fetching full metadata (may take a moment)…')
-    full    = _ytdlp_info(url, flat=False)
+    full    = _ytdlp_info(pl_url, flat=False)
     entries = [e for e in full.get('entries', []) if e and e.get('id') in flat_ids]
     entries.sort(key=lambda e: int(e.get('playlist_index') or 0))
-    _save_cache(url, entries, title)
+    _save_cache(pl_url, entries, title)
     return entries, title
 
 # ═════════════════════════════════════════════════════════════════════════════
