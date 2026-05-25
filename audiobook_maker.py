@@ -1217,9 +1217,25 @@ def mode_single_video(encoder_info):
     url = _ask('YouTube video URL')
 
     if _is_playlist_url(url):
-        entries, pl_title = _fetch_playlist(url)
-        _box([f'Playlist : {pl_title}', f'Videos   : {len(entries)}'])
-        _handle_playlist(entries, pl_title, encoder_info, detected=True)
+        _warn('Playlist URL detected — this is not a single video.')
+        print()
+        print('  P.  Proceed with the whole playlist')
+        print('  V.  Pick specific video(s) from the playlist')
+        print()
+        route = _ask('Choice', default='P', valid=['P', 'p', 'V', 'v'])
+
+        if route.upper() == 'P':
+            entries, pl_title = _fetch_playlist(url)
+            _box([f'Playlist : {pl_title}', f'Videos   : {len(entries)}'])
+            _handle_playlist(entries, pl_title, encoder_info, detected=False)
+        else:
+            entries, pl_title = _fetch_playlist(url)
+            _box([f'Playlist : {pl_title}', f'Videos   : {len(entries)}'])
+            _sep('PLAYLIST VIDEOS')
+            for i, e in enumerate(entries, 1):
+                print(f'  {i:>3}.  {e.get("title", f"Video {i}")}')
+            print()
+            _pick_videos_from_playlist(entries, pl_title, encoder_info)
         return
 
     _info('Fetching video info…')
