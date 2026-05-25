@@ -27,8 +27,8 @@ One script. Fully interactive. No config files needed.
 | # | Input | Output |
 |---|-------|--------|
 | 1 | Folder of `.mp3` / `.m4a` / `.wav` etc. | Single `.m4b` with chapters |
-| 2 | YouTube video URL | Single `.m4b` — YouTube chapters become audiobook chapters. If a playlist URL is pasted, offers to process the whole playlist or pick individual videos; multiple picks can become one book or one per video |
-| 3 | YouTube playlist URL | One combined `.m4b` (each video = chapter) **or** one `.m4b` per video |
+| 2 | YouTube video URL | Single `.m4b` — YouTube chapters auto-detected. If a playlist URL is pasted by mistake, the tool detects it and offers the same three options as mode 3 |
+| 3 | YouTube playlist URL | Three options: one combined `.m4b` (each video = chapter), pick specific videos, or one `.m4b` per video |
 | 4 | Excel / CSV — title column + URL column | Single `.m4b` — each row is one chapter |
 | 5 | Parent folder containing subfolders | One `.m4b` per subfolder (batch mode) |
 
