@@ -6,6 +6,17 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [1.4.0] — 2026-05-25
+
+### Changed
+- **Mode order rewritten** to reflect a more logical flow — YouTube-first, then local files, then spreadsheet:
+  - 1 → YouTube video (was 2)
+  - 2 → YouTube playlist (was 3)
+  - 3 → Folder of audio files (was 1)
+  - 4 → Parent folder / batch (was 5)
+  - 5 → Spreadsheet (was 4)
+- Cookie prompt now correctly triggers for modes 1, 2, and 5 (the YouTube-sourced modes).
+
 ## [1.3.0] — 2026-05-25
 
 ### Added
