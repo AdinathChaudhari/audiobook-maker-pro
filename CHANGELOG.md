@@ -6,6 +6,26 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [1.5.0] — 2026-06-15
+
+### Added
+- **Long-book splitting for older devices.** Books longer than 20 hours can stop
+  resuming playback on older hardware (iPod classic/nano, some car head units) —
+  audio halts when the screen sleeps or the app is closed. Before writing the
+  final file, the tool now detects this and offers to split the book into
+  roughly-equal parts named `(Part 1)`, `(Part 2)`, … that you add as separate
+  books. Part count is `ceil(total / 20h)` divided evenly (e.g. a 50h book →
+  three ~16/17/16h parts, not 20/20/10), and you can override the count.
+  - **No re-encode.** The audio is encoded exactly once; each part is produced by
+    a stream copy (`-c copy`) of the already-encoded audio, so quality is
+    byte-identical to the unsplit book.
+  - **Cuts land on chapter boundaries** nearest each division, so no chapter is
+    sliced; each part keeps its own chapters (re-based to 0:00) and the cover.
+  - **Batch mode (mode 4)** auto-splits long books without prompting, matching its
+    existing auto-adjust behaviour.
+  - Tunable via the `SPLIT_THRESHOLD_MS` / `MAX_PART_MS` constants near the top of
+    the script (e.g. lower `MAX_PART_MS` to 15h for shorter parts).
+
 ## [1.4.0] — 2026-05-25
 
 ### Changed

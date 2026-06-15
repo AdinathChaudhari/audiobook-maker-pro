@@ -12,6 +12,7 @@ One script. Fully interactive. No config files needed.
 - **Smart encoding** — detects hardware acceleration (Apple AudioToolbox) and uses CBR; falls back to software VBR automatically
 - **Smart bitrate** — measures source bitrate, adds a 10% buffer, and snaps up to the next CBR rung
 - **Chapter naming** — keep original titles, number-only, or number + title
+- **Long-book splitting** — books over 20h (which can stall playback on older iPods/car systems) are split into roughly-equal `(Part 1)`/`(Part 2)`/… books at chapter boundaries, with no re-encode
 - **Cover art** — auto-detects a JPG/PNG in the source folder; falls back to YouTube thumbnail or manual path
 - **Rich metadata** — author, narrator, year, genre, description embedded in the M4B
 - **Clean progress UI** — per-track download bars, overall progress bar, encoding progress bar
@@ -200,6 +201,9 @@ Download speed depends on your internet connection and YouTube's throttling. The
 
 **Can I re-run after a partial download?**
 For playlists, failed tracks are skipped with a warning and the rest are stitched together. There is no per-track resume yet.
+
+**My audiobook is over 20 hours and stops playing on my old iPod — can it split?**
+Yes. When a book works out to more than 20 hours, the tool warns you (older iPods, nanos, and some car head units stop resuming playback on very long books once the screen sleeps or the app closes) and offers to split it into roughly-equal parts named `(Part 1)`, `(Part 2)`, … which you add as separate books. Part count is `ceil(total ÷ 20h)` split evenly (a 50h book becomes three ~16/17/16h parts, not 20/20/10), and you can override the count. Cuts land on chapter boundaries so no chapter is cut in half, each part keeps its own chapters and cover, and **the audio is never re-encoded** — it's a stream copy of the already-encoded audio, so quality is identical to the unsplit book. To change the threshold or part length, edit `SPLIT_THRESHOLD_MS` / `MAX_PART_MS` near the top of the script.
 
 **What if my folder has mixed audio formats?**
 Supported: `.mp3 .m4a .m4b .mp4 .wav .flac .aac .ogg .opus .wma`. All are concatenated via FFmpeg's concat demuxer.
