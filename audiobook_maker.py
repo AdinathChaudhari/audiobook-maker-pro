@@ -10,6 +10,10 @@ Five workflows, one interactive tool:
   4. Parent Folder  → M4B  (each subfolder becomes one audiobook — batch mode)
   5. Spreadsheet    → M4B  (Excel/CSV with title + URL columns)
 
+Books over 20 hours (which can stall playback on older iPods/car systems) are
+offered for splitting into roughly-equal "(Part N)" books at chapter boundaries
+— a stream copy of the already-encoded audio, never a re-encode.
+
 Run:
     python audiobook_maker.py
 """
@@ -130,6 +134,13 @@ FFMPEG     = _find_ffmpeg()
 FFPROBE    = shutil.which('ffprobe') or FFMPEG.replace('ffmpeg', 'ffprobe')
 AUDIO_EXTS = {'.mp3', '.m4a', '.m4b', '.mp4', '.wav', '.flac', '.aac', '.ogg', '.opus', '.wma'}
 CBR_LADDER = [64, 96, 128, 160, 192, 256, 320]
+
+# ── Long-book splitting ───────────────────────────────────────────────────────
+# Older devices (iPod classic/nano, some car head units) can stop resuming
+# playback on very long books — audio halts when the screen sleeps or the app
+# is closed. Above the threshold we offer to split into roughly-equal parts.
+SPLIT_THRESHOLD_MS = 20 * 60 * 60 * 1000   # offer to split books longer than this
+MAX_PART_MS        = 20 * 60 * 60 * 1000   # aim for each part to stay at/under this
 
 VBR_QUALITY_MAP = {                    # AAC VBR: 0 = highest quality
     0: 130, 1: 120, 2: 105, 3: 90,
@@ -342,6 +353,43 @@ def _check_output_path(output_path):
             sys.exit(0)
 
 # ═════════════════════════════════════════════════════════════════════════════
+#  LONG-BOOK SPLITTING  (no re-encode — splits the already-encoded audio)
+# ═════════════════════════════════════════════════════════════════════════════
+
+def _num_parts(total_ms):
+    """Number of roughly-equal parts so each stays at/under MAX_PART_MS (min 2)."""
+    return max(2, -(-total_ms // MAX_PART_MS))   # -(-a//b) == ceil(a/b)
+
+def _plan_split_points(chapter_ends_ms, n_parts):
+    """
+    Pick the chapter boundaries that divide a book into n_parts of roughly equal
+    length. Each cut snaps to the chapter end nearest that part's ideal boundary,
+    so a chapter is never sliced in half. Requires len(chapter_ends_ms) >= n_parts.
+    Returns the last-chapter index (0-based) of every part except the last.
+    """
+    total      = chapter_ends_ms[-1]
+    C          = len(chapter_ends_ms)
+    cuts, prev = [], -1
+    for k in range(1, n_parts):
+        target = k * total / n_parts
+        lo, hi = prev + 1, C - (n_parts - k)   # leave >=1 chapter for each remaining part
+        best_i = min(range(lo, hi), key=lambda i: abs(chapter_ends_ms[i] - target))
+        cuts.append(best_i)
+        prev = best_i
+    return cuts
+
+def _chapters_for_window(chapters, win_start, win_end):
+    """Chapters overlapping [win_start, win_end), clamped to the window and rebased to 0."""
+    out = []
+    for ch in chapters:
+        s = max(ch['start'], win_start)
+        e = min(ch['end'],   win_end)
+        if e - s <= 0:
+            continue
+        out.append({'start': s - win_start, 'end': e - win_start, 'title': ch['title']})
+    return out
+
+# ═════════════════════════════════════════════════════════════════════════════
 #  CHAPTER NAMING
 # ═════════════════════════════════════════════════════════════════════════════
 
@@ -417,6 +465,40 @@ def build_m4b(audio_paths, chapter_titles, output_path, cover_path, metadata, en
     encoder, is_hw, enc_desc = encoder_info
     total_chapters = len(yt_chapters) if yt_chapters else len(audio_paths)
 
+    # ── Long-book split decision (asked once, BEFORE the expensive encode) ─────
+    # The split itself happens after encoding as a stream copy — audio is never
+    # re-encoded. Here we only decide how many parts to produce.
+    total_src_ms     = sum(get_duration_ms(p) for p in audio_paths)
+    do_split, n_parts = False, 1
+    if total_src_ms > SPLIT_THRESHOLD_MS:
+        n_parts = _num_parts(total_src_ms)
+        if batch:
+            do_split = True
+            _warn(f'Long book (~{ms_to_hms(total_src_ms)}) — auto-splitting into '
+                  f'{n_parts} parts of ~{ms_to_hms(total_src_ms // n_parts)} each.')
+        else:
+            _sep('LONG AUDIOBOOK')
+            _box([
+                f'This audiobook is ~{ms_to_hms(total_src_ms)} long.',
+                '',
+                'Books over 20h can fail to resume on older devices',
+                '(iPod classic/nano, some car systems): playback stops',
+                'when the screen sleeps or the app is closed.',
+                '',
+                f'Split into {n_parts} parts of ~{ms_to_hms(total_src_ms // n_parts)} each?',
+                'Parts are named "(Part 1)", "(Part 2)", … and added as',
+                'separate books.  The audio is NOT re-encoded.',
+            ])
+            ans = _ask('Split into parts?  (y/n)', default='yes',
+                       valid=['yes', 'no', 'y', 'n'])
+            do_split = ans in ('yes', 'y')
+            if do_split:
+                custom = _ask('Number of parts', default=str(n_parts))
+                try:
+                    n_parts = max(2, int(custom))
+                except ValueError:
+                    pass
+
     # ── Header ────────────────────────────────────────────────────────────────
     _sep('ENCODING')
     mode_tag = 'Hardware · CBR' if is_hw else 'Software · VBR'
@@ -482,7 +564,7 @@ def build_m4b(audio_paths, chapter_titles, output_path, cover_path, metadata, en
         # A post-concat re-encode shifts AAC frame boundaries and causes drift.
         _step(1, 4, f'Encoding chapters  [{mode_label}]')
         encoded_files = []
-        total_src_ms  = sum(get_duration_ms(p) for p in audio_paths)
+        # total_src_ms was computed above (for the split decision) — reuse it.
 
         with tqdm(total=int(total_src_ms / 1000), unit='s', ncols=W + 4,
                   bar_format='  {l_bar}{bar}| {n_fmt}/{total_fmt} s') as pbar:
@@ -550,36 +632,18 @@ def build_m4b(audio_paths, chapter_titles, output_path, cover_path, metadata, en
             sys.exit(1)
         _ok(f'Concatenated {total_chapters} chapter(s)')
 
-        # ── Build ffmetadata ──────────────────────────────────────────────────
-        meta_file = tmp / 'meta.txt'
-        tag_map = {
-            'title': 'title', 'author': 'artist', 'narrator': 'composer',
-            'year': 'date',   'genre': 'genre',   'description': 'comment',
-        }
-        with open(meta_file, 'w', encoding='utf-8') as mf:
-            mf.write(';FFMETADATA1\n')
-            if metadata:
-                for k, tag in tag_map.items():
-                    v = metadata.get(k)
-                    if v:
-                        mf.write(f'{tag}={v}\n')
-                if metadata.get('title'):
-                    mf.write(f"album={metadata['title']}\n")
-                if metadata.get('author'):
-                    mf.write(f"album_artist={metadata['author']}\n")
-            mf.write('\n')
-            if yt_chapters:
-                for ch in yt_chapters:
-                    start = int(ch['start_time'] * 1000)
-                    end   = int(ch['end_time'] * 1000)
-                    mf.write(f'[CHAPTER]\nTIMEBASE=1/1000\nSTART={start}\nEND={end}\ntitle={ch["title"]}\n\n')
-            else:
-                cursor = 0
-                for title_ch, dur in zip(chapter_titles, durations_ms):
-                    start = cursor; end = cursor + dur; cursor = end
-                    mf.write(f'[CHAPTER]\nTIMEBASE=1/1000\nSTART={start}\nEND={end}\ntitle={title_ch}\n\n')
+        # ── Build the unified chapter list (start/end in ms) ──────────────────
+        if yt_chapters:
+            chapters = [{'start': int(c['start_time'] * 1000),
+                         'end':   int(c['end_time'] * 1000),
+                         'title': c['title']} for c in yt_chapters]
+        else:
+            chapters, _cursor = [], 0
+            for title_ch, dur in zip(chapter_titles, durations_ms):
+                chapters.append({'start': _cursor, 'end': _cursor + dur, 'title': title_ch})
+                _cursor += dur
 
-        # ── Cover ─────────────────────────────────────────────────────────────
+        # ── Cover (extracted once, reused for every part) ─────────────────────
         cover_arg = []
         if cover_path and os.path.isfile(str(cover_path)):
             cover_jpg = tmp / 'cover.jpg'
@@ -588,40 +652,108 @@ def build_m4b(audio_paths, chapter_titles, output_path, cover_path, metadata, en
             if cover_jpg.exists():
                 cover_arg = ['-i', str(cover_jpg)]
 
-        # ── Step 4: Mux ───────────────────────────────────────────────────────
-        _step(4, 4, 'Muxing chapters + cover → M4B')
-        output_path.parent.mkdir(parents=True, exist_ok=True)
-        _check_output_path(output_path)
+        # ── Work out the part windows (one window = one output file) ──────────
+        # When splitting, cuts snap to the CHAPTER boundary nearest each equal
+        # division, so no chapter is sliced. The cut is a stream copy (-c copy)
+        # below — the encoded audio is reused as-is, never re-encoded.
+        if do_split:
+            ends = [c['end'] for c in chapters]
+            if len(chapters) >= n_parts:
+                cuts   = _plan_split_points(ends, n_parts)
+                bounds = [0] + [chapters[i]['end'] for i in cuts] + [total_ms]
+            else:
+                # Fewer chapters than parts: fall back to equal time cuts.
+                bounds = [round(k * total_ms / n_parts) for k in range(n_parts)] + [total_ms]
+            windows = [(bounds[k], bounds[k + 1], k + 1) for k in range(n_parts)]
+        else:
+            windows = [(0, total_ms, None)]
 
-        mux_cmd = [FFMPEG, '-y',
-                   '-i', str(encoded),
-                   '-f', 'ffmetadata', '-i', str(meta_file)]
-        if cover_arg:
-            mux_cmd += cover_arg
-        mux_cmd += ['-map_metadata', '1', '-map_chapters', '1', '-map', '0:a']
-        if cover_arg:
-            mux_cmd += ['-map', '2:v', '-c:v', 'copy', '-disposition:v:0', 'attached_pic']
-        mux_cmd += ['-c:a', 'copy', '-movflags', '+faststart',
-                    '-brand', 'M4B ', '-f', 'mp4', str(output_path)]
+        # ── Step 4: Mux each window → M4B ─────────────────────────────────────
+        tag_map = {
+            'author': 'artist', 'narrator': 'composer',
+            'year': 'date',     'genre': 'genre',  'description': 'comment',
+        }
+        base_title = (metadata or {}).get('title') or output_path.stem
+        results    = []
 
-        r = subprocess.run(mux_cmd, capture_output=True, text=True)
-        if r.returncode != 0:
-            print(f'\n  Mux error:\n{r.stderr[-500:]}')
-            sys.exit(1)
+        for win_s, win_e, part_no in windows:
+            if part_no is None:
+                out_path   = output_path
+                this_title = base_title
+            else:
+                out_path   = output_path.parent / f'{sanitize(output_path.stem)} (Part {part_no}).m4b'
+                this_title = f'{base_title} (Part {part_no})'
+
+            win_chaps = _chapters_for_window(chapters, win_s, win_e)
+            win_dur   = win_e - win_s
+
+            # ffmetadata for this window — global tags + its chapters, rebased to 0.
+            meta_file = tmp / f'meta_{part_no or 0}.txt'
+            with open(meta_file, 'w', encoding='utf-8') as mf:
+                mf.write(';FFMETADATA1\n')
+                if metadata:
+                    for k, tag in tag_map.items():
+                        v = metadata.get(k)
+                        if v:
+                            mf.write(f'{tag}={v}\n')
+                mf.write(f'title={this_title}\n')
+                mf.write(f'album={this_title}\n')
+                if metadata and metadata.get('author'):
+                    mf.write(f"album_artist={metadata['author']}\n")
+                mf.write('\n')
+                for ch in win_chaps:
+                    mf.write(f'[CHAPTER]\nTIMEBASE=1/1000\n'
+                             f'START={ch["start"]}\nEND={ch["end"]}\ntitle={ch["title"]}\n\n')
+
+            label = out_path.name if part_no is None else f'Part {part_no}/{n_parts} → {out_path.name}'
+            _step(4, 4, f'Muxing → {label}')
+            out_path.parent.mkdir(parents=True, exist_ok=True)
+            if not batch:
+                _check_output_path(out_path)
+
+            # -ss/-t as INPUT options for the encoded stream = copy-only cut.
+            mux_cmd = [FFMPEG, '-y']
+            if part_no is not None:
+                mux_cmd += ['-ss', f'{win_s / 1000:.3f}', '-t', f'{win_dur / 1000:.3f}']
+            mux_cmd += ['-i', str(encoded), '-f', 'ffmetadata', '-i', str(meta_file)]
+            if cover_arg:
+                mux_cmd += cover_arg
+            mux_cmd += ['-map_metadata', '1', '-map_chapters', '1', '-map', '0:a']
+            if cover_arg:
+                mux_cmd += ['-map', '2:v', '-c:v', 'copy', '-disposition:v:0', 'attached_pic']
+            mux_cmd += ['-c:a', 'copy', '-movflags', '+faststart',
+                        '-brand', 'M4B ', '-f', 'mp4', str(out_path)]
+
+            r = subprocess.run(mux_cmd, capture_output=True, text=True)
+            if r.returncode != 0:
+                print(f'\n  Mux error:\n{r.stderr[-500:]}')
+                sys.exit(1)
+            results.append((out_path, win_dur, len(win_chaps)))
 
     # ── Summary ───────────────────────────────────────────────────────────────
-    size_mb = output_path.stat().st_size / (1024 * 1024)
     _sep()
-    _box([
-        f'AUDIOBOOK CREATED',
-        f'',
-        f'File      :  {output_path.name}',
-        f'Location  :  {output_path.parent}',
-        f'Size      :  {size_mb:.1f} MB',
-        f'Duration  :  {ms_to_hms(total_ms)}',
-        f'Chapters  :  {total_chapters}',
-    ], title='DONE')
-    return output_path
+    if len(results) == 1:
+        out_path, dur, nch = results[0]
+        size_mb = out_path.stat().st_size / (1024 * 1024)
+        _box([
+            'AUDIOBOOK CREATED',
+            '',
+            f'File      :  {out_path.name}',
+            f'Location  :  {out_path.parent}',
+            f'Size      :  {size_mb:.1f} MB',
+            f'Duration  :  {ms_to_hms(dur)}',
+            f'Chapters  :  {nch}',
+        ], title='DONE')
+    else:
+        lines = [f'AUDIOBOOK SPLIT INTO {len(results)} PARTS', '']
+        for out_path, dur, nch in results:
+            size_mb = out_path.stat().st_size / (1024 * 1024)
+            lines.append(out_path.name)
+            lines.append(f'    {ms_to_hms(dur)}  ·  {nch} chapters  ·  {size_mb:.1f} MB')
+            lines.append('')
+        lines.append(f'Location  :  {results[0][0].parent}')
+        _box(lines, title='DONE')
+    return [out for out, _, _ in results]
 
 # ═════════════════════════════════════════════════════════════════════════════
 #  MODE 3: FOLDER → AUDIOBOOK
