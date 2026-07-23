@@ -6,6 +6,21 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [1.6.0] — 2026-07-23
+
+### Added
+- **Recursive (nested) batch mode.** Batch mode now walks the whole folder tree, not
+  just immediate children: every folder at any depth that directly contains audio
+  becomes one audiobook. Titles are built from the hierarchy relative to the parent,
+  joined by ` - ` (e.g. `Basics - Level 1`, `Intelligence - Level 8`). A folder that
+  has both audio and sub-folders becomes a book *and* is descended into. Flat parents
+  behave exactly as before (single-level titles) — fully backward-compatible.
+- **Cover inheritance.** If a leaf folder has no cover image, the tool walks up toward
+  the parent and uses the nearest single image — so one cover in a theme folder applies
+  to all of that theme's sub-books.
+
+---
+
 ## [1.5.0] — 2026-06-15
 
 ### Added
