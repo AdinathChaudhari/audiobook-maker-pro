@@ -808,28 +808,85 @@ def mode_folder(encoder_info):
 #  MODE 4: PARENT FOLDER → ONE AUDIOBOOK PER SUBFOLDER  (batch)
 # ═════════════════════════════════════════════════════════════════════════════
 
+def _find_audio_folders(parent):
+    """Recursively collect every folder under `parent` that DIRECTLY contains audio
+    files. Enables nested batch: parent/theme/level/*.mp3 → one book per leaf folder.
+    A folder with both audio and sub-folders becomes a book AND is descended into."""
+    found = []
+    def walk(d):
+        try:
+            entries = sorted(d.iterdir())
+        except OSError:
+            return
+        if any(f.suffix.lower() in AUDIO_EXTS for f in entries if f.is_file()):
+            found.append(d)
+        for sub in entries:
+            if sub.is_dir():
+                walk(sub)
+    for d in sorted(parent.iterdir()):
+        if d.is_dir():
+            walk(d)
+    return found
+
+
+def _folder_title(parent, folder):
+    """Hierarchical title: the folder's path relative to parent, joined by ' - '.
+    Immediate children keep their plain name (backward-compatible)."""
+    return ' - '.join(folder.relative_to(parent).parts)
+
+
+def _find_cover_upwards(folder, parent, IMAGE_EXTS):
+    """A single image in the folder; else the nearest one walking up to `parent`
+    (so a cover in a theme folder applies to all its level sub-books)."""
+    d = folder
+    while True:
+        imgs = [f for f in d.iterdir() if f.is_file() and f.suffix.lower() in IMAGE_EXTS]
+        if len(imgs) == 1:
+            return imgs[0]
+        if d == parent:
+            return None
+        d = d.parent
+
+
 def mode_batch_folder(encoder_info):
     _sep('BATCH FOLDERS → AUDIOBOOKS')
     parent = Path(_ask_path('Path to parent folder containing subfolders', is_dir=True))
 
     IMAGE_EXTS = {'.jpg', '.jpeg', '.png'}
 
-    # Discover subfolders that contain at least one audio file
-    subfolders = sorted([
-        d for d in parent.iterdir()
-        if d.is_dir() and any(f.suffix.lower() in AUDIO_EXTS for f in d.iterdir())
-    ])
-
+    # Discover every folder (at any depth) that directly contains audio.
+    subfolders = _find_audio_folders(parent)
     if not subfolders:
-        print('\n  No subfolders with audio files found.\n'); sys.exit(1)
+        print('\n  No folders with audio files found.\n'); sys.exit(1)
 
-    _box([d.name for d in subfolders[:8]] + ([f'… and {len(subfolders) - 8} more'] if len(subfolders) > 8 else []),
-         title=f'Found {len(subfolders)} subfolder(s) to convert')
+    # If any book comes from a nested folder, let the user choose whether the
+    # parent folder(s) are part of the book title.
+    nested = any(len(d.relative_to(parent).parts) > 1 for d in subfolders)
+    include_parents = True
+    if nested:
+        ex = next(d for d in subfolders if len(d.relative_to(parent).parts) > 1)
+        _sep('BOOK NAMING')
+        _box([
+            f'1.  Include parent folder(s):  "{_folder_title(parent, ex)}"',
+            f'2.  Leaf folder name only:     "{ex.name}"',
+        ])
+        include_parents = _ask('Choice', default='1', valid=['1', '2']) == '1'
 
-    # Check which already have a .m4b and offer to skip
-    already_done = [d for d in subfolders if (parent / f'{sanitize(d.name)}.m4b').exists()]
+    title_of = {d: (_folder_title(parent, d) if include_parents else d.name) for d in subfolders}
+
+    # Guard: leaf-only titles can collide (e.g. many "Level 1"), which would
+    # overwrite outputs — fall back to full hierarchy if that happens.
+    if len(set(title_of.values())) != len(title_of):
+        _warn('Leaf-only names collide — keeping parent folders so titles stay unique.')
+        title_of = {d: _folder_title(parent, d) for d in subfolders}
+
+    _box([title_of[d] for d in subfolders[:8]] + ([f'… and {len(subfolders) - 8} more'] if len(subfolders) > 8 else []),
+         title=f'Found {len(subfolders)} folder(s) to convert')
+
+    # Check which already have a .m4b (named by hierarchical title) and skip
+    already_done = [d for d in subfolders if (parent / f'{sanitize(title_of[d])}.m4b').exists()]
     if already_done:
-        _box([f'✓  {d.name}.m4b' for d in already_done], title=f'{len(already_done)} already converted — will skip')
+        _box([f'✓  {title_of[d]}.m4b' for d in already_done], title=f'{len(already_done)} already converted — will skip')
         subfolders = [d for d in subfolders if d not in already_done]
         if not subfolders:
             print('\n  All audiobooks already exist. Nothing to do.\n'); return
@@ -858,7 +915,8 @@ def mode_batch_folder(encoder_info):
     # Process each subfolder
     done, skipped, failed = [], [], []
     for i, folder in enumerate(subfolders, 1):
-        _sep(f'[{i}/{len(subfolders)}]  {folder.name}')
+        title = title_of[folder]
+        _sep(f'[{i}/{len(subfolders)}]  {title}')
 
         files = sorted(
             [f for f in folder.iterdir() if f.suffix.lower() in AUDIO_EXTS],
@@ -868,13 +926,12 @@ def mode_batch_folder(encoder_info):
         raw_titles     = [re.sub(r'^\d+[\s\-_\.]*', '', f.stem).strip() or f.stem for f in files]
         chapter_titles = [namer(j + 1, t) for j, t in enumerate(raw_titles)]
 
-        cover_images = [f for f in folder.iterdir() if f.suffix.lower() in IMAGE_EXTS]
-        cover_path   = cover_images[0] if len(cover_images) == 1 else None
+        cover_path = _find_cover_upwards(folder, parent, IMAGE_EXTS)
         if cover_path:
             _ok(f'Cover detected: {cover_path.name}')
 
-        meta          = {**shared_meta, 'title': folder.name}
-        output_path   = parent / f'{sanitize(folder.name)}.m4b'
+        meta          = {**shared_meta, 'title': title}
+        output_path   = parent / f'{sanitize(title)}.m4b'
 
         try:
             build_m4b(files, chapter_titles, output_path, cover_path, meta, encoder_info, batch=True)
