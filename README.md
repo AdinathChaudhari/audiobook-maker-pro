@@ -30,16 +30,21 @@ One script. Fully interactive. No config files needed.
 | 1 | YouTube video URL | Single `.m4b` — YouTube chapters embedded automatically |
 | 2 | YouTube playlist URL | Three options: one combined `.m4b`, pick specific videos, or one `.m4b` per video |
 | 3 | Folder of `.mp3` / `.m4a` / `.wav` etc. | Single `.m4b` with chapters |
-| 4 | Parent folder containing subfolders | One `.m4b` per subfolder (batch mode) |
+| 4 | Parent folder of subfolders (nested OK) | One `.m4b` per audio-containing folder at any depth (batch mode) |
 | 5 | Excel / CSV — title column + URL column | Single `.m4b` — each row is one chapter |
 
 ### Batch mode (4) details
 
-- Each subfolder becomes one audiobook; subfolder name becomes the title
+- **Nested folders supported** — every folder at any depth that directly contains audio
+  becomes one audiobook, so `Parent/Theme/Level/*.mp3` yields one book per level
+- **Title from the hierarchy** — joined by ` - ` (e.g. `Basics - Level 1`). When nesting
+  exists you're asked whether to **include the parent folder(s)** in the title or use the
+  **leaf name only**; if leaf-only names would collide it keeps parents automatically
 - Shared metadata (author, narrator, year, genre) is asked **once** and applied to all
-- Cover art is auto-detected per subfolder (single JPG/PNG inside it)
-- Already-converted books (`.m4b` exists in parent) are skipped automatically
-- Bitrate is detected per subfolder independently; if >30% above source it auto-adjusts without prompting
+- Cover art is auto-detected per folder; a leaf with no cover **inherits** the nearest
+  cover from a parent folder (one cover in a theme folder covers all its sub-books)
+- Already-converted books (`.m4b` in the parent) are skipped automatically
+- Bitrate is detected per folder independently; if >30% above source it auto-adjusts
 
 ---
 
