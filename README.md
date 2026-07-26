@@ -1,5 +1,9 @@
 # Audiobook Maker PRO
 
+<p align="center">
+  <img src="docs/media/hero.png" alt="audiobook-maker-pro" width="820">
+</p>
+
 Convert anything into a chapterized `.m4b` audiobook — from your local files, a YouTube video, an entire playlist, or a spreadsheet of links.
 
 One script. Fully interactive. No config files needed.
