@@ -51,3 +51,6 @@ temp_*/
 .idea/
 *.swp
 *.swo
+
+# Private About-image prompt (personal speciality — not published)
+docs/media/ABOUT-IMAGE.md
