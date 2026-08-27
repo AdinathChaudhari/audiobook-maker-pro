@@ -6,6 +6,21 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [1.6.1] — 2026-08-27
+
+### Fixed
+- **YouTube auto-dubs are no longer downloaded.** YouTube now attaches machine-generated
+  dubbed audio tracks to many videos, and it encodes those dubs at a *higher* bitrate than
+  the original — so the old "pick the highest bitrate" sort silently chose the dub, and the
+  audiobook came out in the wrong voice (and often the wrong language). Track selection now
+  keeps only the original-language audio (flagged by yt-dlp as `language_preference >= 10`
+  or `original` in `format_note`) before sorting by bitrate, and prints the chosen track:
+  `Audio track     : en (original) — auto-dubs skipped`.
+  - The format string no longer ends in `/best`, which could resolve back to a dubbed track.
+  - Videos with no dubs are unaffected — the filter is a no-op when only one track exists.
+
+---
+
 ## [1.6.0] — 2026-07-23
 
 ### Added
