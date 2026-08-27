@@ -969,12 +969,27 @@ def _ytdlp_info(url, flat=False):
     with yt_dlp.YoutubeDL(opts) as ydl:
         return ydl.extract_info(url, download=False)
 
+def _is_original_audio(f):
+    """True if this audio track is the video's original language, not a YouTube auto-dub.
+
+    YouTube encodes auto-dubbed tracks at a HIGHER bitrate than the original, so any
+    bitrate-first sort silently picks a dub. The original is flagged two ways:
+    language_preference == 10, and 'original' in format_note.
+    """
+    if (f.get('language_preference') or -1) >= 10:
+        return True
+    return 'original' in (f.get('format_note') or '').lower()
+
 def _best_audio_format(url):
     try:
         info   = _ytdlp_info(url)
         audio  = [f for f in info.get('formats', [])
                   if f.get('acodec') not in (None, 'none')
                   and f.get('vcodec') in (None, 'none', 'video only')]
+        # Keep only the original-language track when the video carries auto-dubs.
+        originals = [f for f in audio if _is_original_audio(f)]
+        if originals:
+            audio = originals
         pref   = {'opus': 0, 'aac': 1, 'mp4a': 1, 'vorbis': 2, 'mp3': 3}
         audio.sort(key=lambda f: (
             -(f.get('abr') or f.get('tbr') or 0),
@@ -982,9 +997,15 @@ def _best_audio_format(url):
         ))
         if audio:
             best = audio[0]
-            return f"{best['format_id']}/bestaudio/best", best.get('abr') or best.get('tbr') or 0
+            if originals:
+                lang = best.get('language') or 'original'
+                _info(f'Audio track     : {lang} (original) — auto-dubs skipped')
+            return (f"{best['format_id']}/bestaudio",
+                    best.get('abr') or best.get('tbr') or 0)
     except Exception:
         pass
+    # Fallback: yt-dlp's own default sort puts language preference first, so this
+    # also prefers the original track. Never bare 'best' — that can be a dub.
     return 'bestaudio/best', 0
 
 def _download_audio(url, dest_path, label='', cache_stem=None):
