@@ -1,3 +1,22 @@
+<!--
+GitHub metadata — authored here, applied in repo Settings (NOT rendered on the page):
+
+About:  Convert folders, YouTube videos, playlists & spreadsheets into
+        chapterized M4B audiobooks — an interactive CLI with
+        hardware-accelerated AAC and auto chapters, on yt-dlp and FFmpeg.
+
+Topics (ranked): audiobook, m4b, audiobook-creator, chapterized-audiobook,
+                 yt-dlp, ffmpeg, aac, audio-conversion,
+                 youtube-to-audiobook, playlist, offline-listening, python,
+                 cli, interactive-cli, macos, media-automation
+
+Social preview: docs/media/hero.png is the 1536x1024 source; the card is
+  derived, never committed —
+    python Tools/image_compress.py docs/media/hero.png 1MB --glass
+  then upload docs/media/hero-glass.jpg in Settings > Social preview.
+  See GitHub/docs/image-processing.md.
+-->
+
 # Audiobook Maker PRO
 
 <p align="center">
